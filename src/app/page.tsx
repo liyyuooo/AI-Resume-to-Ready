@@ -47,7 +47,7 @@ const interviewTypeLabels: Record<string, string> = {
 
 export default function HomePage() {
   const router = useRouter();
-  const { settings, loadSettings, isLoading: settingsLoading } = useSettingsStore();
+  const { loadSettings, isLoading: settingsLoading } = useSettingsStore();
   const { loadResumes, resumes } = useResumeStore();
   const { loadSessions, sessions } = useInterviewStore();
 
@@ -57,22 +57,12 @@ export default function HomePage() {
     loadSessions();
   }, [loadSettings, loadResumes, loadSessions]);
 
-  useEffect(() => {
-    if (!settingsLoading && !settings?.apiKey) {
-      router.push('/settings');
-    }
-  }, [settingsLoading, settings, router]);
-
   if (settingsLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
         加载中...
       </div>
     );
-  }
-
-  if (!settings?.apiKey) {
-    return null;
   }
 
   const recentResumes = resumes.slice(0, 3);
