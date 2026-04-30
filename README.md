@@ -25,6 +25,10 @@
 
 ## 快速开始
 
+在线使用：[ai-resume-to-ready.vercel.app](https://ai-resume-to-ready.vercel.app)
+
+本地运行：
+
 ```bash
 npm install
 npm run dev
