@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Resume to Ready
 
-## Getting Started
+从简历到面试，AI 帮你梳理经历、优化简历、模拟面试，一条完整工作流。
 
-First, run the development server:
+## 功能
+
+- **导入与解析** — 支持 PDF / Word / 文本，AI 自动抽取结构化信息
+- **对话式创建** — AI 追问经历细节，帮你挖出亮点与成果
+- **JD 匹配分析** — 简历 vs JD 对齐，找出缺口、关键词和改写方向
+- **多类型模拟面试** — 岗位问答 / 简历深问 / 行为面试 / 技术题，多轮实战对话
+- **语音输入** — 面试中支持语音回答，边说边转文字
+
+## 面向用户
+
+- **初次求职者** — 没写过简历、经历零散不会包装、对面试紧张
+- **跨岗位求职者** — 想转岗跨行业，现有经验需要按新岗位重新包装
+
+## 技术栈
+
+- Next.js (App Router) / React / TypeScript
+- Tailwind CSS
+- IndexedDB（浏览器本地存储，数据不留服务器）
+- Web Speech API（语音识别）
+- 兼容 OpenAI 格式的 LLM API
+
+## 快速开始
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+打开 [http://localhost:3000](http://localhost:3000)。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 配置 API
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+支持所有兼容 OpenAI 格式的 API，如阿里云百炼、百度千帆、DeepSeek 等。
 
-## Learn More
+1. 打开应用 → 设置页
+2. 填写 API 地址和 API Key
+3. 选择模型
 
-To learn more about Next.js, take a look at the following resources:
+配置保存在浏览器本地，不会上传到任何服务器。
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 部署
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new)
 
-## Deploy on Vercel
+或手动部署：
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run build
+npm start
+```
