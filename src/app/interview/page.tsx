@@ -395,7 +395,7 @@ function InterviewContent() {
                     <Button
                       size="sm"
                       className="rounded-full text-xs flex-1"
-                      onClick={() => router.push(`/interview/session?resumeId=${session.resumeId}&type=${session.type}`)}
+                      onClick={() => router.push(`/interview/session?resumeId=${session.resumeId}&type=${session.type}&sessionId=${session.id}`)}
                     >
                       继续面试
                     </Button>

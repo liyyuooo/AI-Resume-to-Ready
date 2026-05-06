@@ -10,7 +10,7 @@ import { Send, ArrowLeft, RotateCcw, Mic, MicOff, Loader2 } from 'lucide-react';
 import { useResumeStore, useSettingsStore, useInterviewStore } from '@/store';
 import { createLLM } from '@/lib/llm';
 import { getInterviewSystemPrompt } from '@/lib/prompts';
-import { resolveResume } from '@/lib/db';
+import { resolveResume, getInterview } from '@/lib/db';
 import { useSpeechRecognition } from '@/lib/hooks/use-speech-recognition';
 import { v4 as uuidv4 } from 'uuid';
 import type { InterviewSession, InterviewType, Message, ChatCompletionMessage, ContentPart } from '@/types';
@@ -48,6 +48,7 @@ function InterviewSessionContent() {
   const interviewType = (searchParams.get('type') || 'job-targeted') as InterviewType;
   const targetCompany = searchParams.get('company') || '';
   const targetRole = searchParams.get('role') || '';
+  const sessionId = searchParams.get('sessionId') || '';
 
   // JD 从 sessionStorage 读取，避免 URL 过长
   const [jobDescription, setJobDescription] = useState('');
@@ -56,28 +57,12 @@ function InterviewSessionContent() {
   const { settings } = useSettingsStore();
   const { saveSession } = useInterviewStore();
 
-  const [messages, setMessages] = useState<Message[]>(() => [
-    {
-      id: uuidv4(),
-      role: 'assistant',
-      content: getWelcomeMessage(interviewType, targetRole),
-      timestamp: new Date().toISOString(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
-  const [session, setSession] = useState<InterviewSession | null>({
-    id: uuidv4(),
-    type: interviewType,
-    resumeId,
-    jobDescription,
-    targetRole,
-    targetCompany,
-    messages: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+  const [session, setSession] = useState<InterviewSession | null>(null);
+  const [sessionReady, setSessionReady] = useState(false);
   const [errorInfo, setErrorInfo] = useState<string | null>(null);
   const [voiceDraft, setVoiceDraft] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -113,6 +98,43 @@ function InterviewSessionContent() {
       setSession((prev) => prev ? { ...prev, jobDescription } : prev);
     }
   }, [jobDescription]);
+
+  // 初始化 session：恢复历史或创建新会话
+  useEffect(() => {
+    const init = async () => {
+      if (sessionId) {
+        const existing = await getInterview(sessionId);
+        if (existing) {
+          setSession(existing);
+          setMessages(existing.messages || []);
+          setSessionReady(true);
+          return;
+        }
+      }
+      // 新会话
+      setSession({
+        id: uuidv4(),
+        type: interviewType,
+        resumeId,
+        jobDescription,
+        targetRole,
+        targetCompany,
+        messages: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      setMessages([
+        {
+          id: uuidv4(),
+          role: 'assistant',
+          content: getWelcomeMessage(interviewType, targetRole),
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+      setSessionReady(true);
+    };
+    init();
+  }, []);
 
   // 语音识别
   const {
@@ -189,8 +211,20 @@ function InterviewSessionContent() {
         timestamp: new Date().toISOString(),
       };
 
-      setMessages([...newMessages, assistantMessage]);
+      const finalMessages = [...newMessages, assistantMessage];
+      setMessages(finalMessages);
       setStreamingContent('');
+
+      // 自动保存
+      if (session) {
+        const updated = {
+          ...session,
+          messages: finalMessages,
+          updatedAt: new Date().toISOString(),
+        };
+        setSession(updated);
+        saveSession(updated);
+      }
     } catch (error) {
       console.error('Chat error:', error);
       let errorMessage = '抱歉，发生了错误。';
@@ -220,7 +254,17 @@ function InterviewSessionContent() {
         content: errorMessage,
         timestamp: new Date().toISOString(),
       };
-      setMessages([...newMessages, errorMsgMessage]);
+      const errorFinalMessages = [...newMessages, errorMsgMessage];
+      setMessages(errorFinalMessages);
+      if (session) {
+        const updated = {
+          ...session,
+          messages: errorFinalMessages,
+          updatedAt: new Date().toISOString(),
+        };
+        setSession(updated);
+        saveSession(updated);
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -268,6 +312,15 @@ function InterviewSessionContent() {
       startListening();
     }
   };
+
+  if (!sessionReady || !session) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+        加载中...
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col px-4 pb-8 pt-6">
