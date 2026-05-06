@@ -184,22 +184,60 @@ function nativeOpen(
   });
 }
 
+function deleteDatabase(name: string, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(name);
+    const timeout = setTimeout(() => {
+      reject(new Error('IndexedDB deleteDatabase timeout'));
+    }, timeoutMs);
+
+    request.onsuccess = () => {
+      clearTimeout(timeout);
+      resolve();
+    };
+
+    request.onerror = () => {
+      clearTimeout(timeout);
+      reject(request.error || new Error('IndexedDB deleteDatabase failed'));
+    };
+
+    request.onblocked = () => {
+      clearTimeout(timeout);
+      reject(new Error('IndexedDB deleteDatabase blocked'));
+    };
+  });
+}
+
 export async function getDB() {
   if (typeof indexedDB === 'undefined') {
     throw new Error('IndexedDB is not available (server-side rendering)');
   }
-  // 已 resolve 的 promise 直接复用；已 reject 的通过 dbFailed 标记跳过
   if (dbPromise && !dbFailed) return dbPromise;
 
   dbFailed = false;
   dbPromise = (async () => {
-    // === Tier 1: 无版本打开（不触发 upgrade，永不 block，应该瞬间完成） ===
+    // === Tier 1: 无版本打开（不触发 upgrade，永不 block） ===
     let db: IDBDatabase;
     try {
       db = await nativeOpen(DB_NAME, undefined, undefined, 1000);
     } catch (err) {
-      console.warn('IndexedDB versionless open failed:', err);
-      throw err;
+      // 打开失败 → 可能是数据库损坏或死连接残留 → 删除重建
+      console.warn('IndexedDB versionless open failed, deleting and recreating:', err);
+      try {
+        await deleteDatabase(DB_NAME, 2000);
+      } catch (delErr) {
+        console.warn('deleteDatabase also failed:', delErr);
+      }
+      // 重建新数据库
+      db = await nativeOpen(DB_NAME, DB_VERSION, (idb, oldVersion) => {
+        createStores(idb, oldVersion);
+      }, 2000);
+
+      db.onversionchange = () => {
+        db.close();
+        dbPromise = null;
+      };
+      return wrap(db) as unknown as IDBPDatabase<ResumeAIDB>;
     }
 
     db.onversionchange = () => {
@@ -211,7 +249,6 @@ export async function getDB() {
     const needsUpgrade = currentVersion < DB_VERSION;
     const hasExperiences = db.objectStoreNames.contains('experiences');
 
-    // 如果版本够了且 schema 完整，直接使用
     if (!needsUpgrade && hasExperiences) {
       return wrap(db) as unknown as IDBPDatabase<ResumeAIDB>;
     }
@@ -230,7 +267,6 @@ export async function getDB() {
         dbPromise = null;
       };
 
-      // 检查是否有旧简历数据需要迁移（v2 → v3）
       if (!hasExperiences && upgraded.objectStoreNames.contains('resumes')) {
         try {
           const checkTx = upgraded.transaction('resumes', 'readonly');
@@ -254,20 +290,24 @@ export async function getDB() {
 
       return wrap(upgraded) as unknown as IDBPDatabase<ResumeAIDB>;
     } catch (err) {
-      console.error('IndexedDB upgrade failed:', err);
-      // 升级失败（blocked / timeout），回退到旧版本 DB 使用
-      // 此时 experiences 表可能缺失，相关操作会失败
-      const fallback = await nativeOpen(DB_NAME, undefined, undefined, 2000);
-      fallback.onversionchange = () => {
-        fallback.close();
+      console.error('IndexedDB upgrade blocked, deleting and recreating:', err);
+      // 升级被阻塞 → 删除旧数据库，重建
+      try {
+        await deleteDatabase(DB_NAME, 2000);
+      } catch (delErr) {
+        console.warn('deleteDatabase also failed:', delErr);
+      }
+      const fresh = await nativeOpen(DB_NAME, DB_VERSION, (idb, oldVersion) => {
+        createStores(idb, oldVersion);
+      }, 2000);
+      fresh.onversionchange = () => {
+        fresh.close();
         dbPromise = null;
       };
-      console.warn('Using fallback DB at version', fallback.version, '— experiences store may be unavailable');
-      return wrap(fallback) as unknown as IDBPDatabase<ResumeAIDB>;
+      return wrap(fresh) as unknown as IDBPDatabase<ResumeAIDB>;
     }
   })();
 
-  // 失败时重置，允许下次调用重试
   dbPromise.catch(() => {
     dbFailed = true;
   });
