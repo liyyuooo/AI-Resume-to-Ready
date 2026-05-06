@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useSyncExternalStore, Suspense, useEffec
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Send, ArrowLeft, RotateCcw, Mic, MicOff, Loader2 } from 'lucide-react';
 import { useResumeStore, useSettingsStore, useInterviewStore } from '@/store';
@@ -80,6 +81,14 @@ function InterviewSessionContent() {
   const [errorInfo, setErrorInfo] = useState<string | null>(null);
   const [voiceDraft, setVoiceDraft] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const autoResize = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  };
 
   // 避免 SSR 水合问题
   const mounted = useSyncExternalStore(
@@ -361,10 +370,14 @@ function InterviewSessionContent() {
             </Button>
           )}
 
-          <Input
-            placeholder={mounted && isListening ? '正在聆听...' : '输入你的回答...'}
+          <Textarea
+            ref={textareaRef}
+            placeholder={mounted && isListening ? '正在聆听...' : '输入你的回答... (Enter 发送，Shift+Enter 换行)'}
             value={voiceDisplayValue}
-            onChange={(e) => setInputMessage(e.target.value)}
+            onChange={(e) => {
+              setInputMessage(e.target.value);
+              autoResize();
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -372,7 +385,8 @@ function InterviewSessionContent() {
               }
             }}
             disabled={isGenerating}
-            className="flex-1 rounded-full bg-[#fffaf0] px-5"
+            className="flex-1 resize-none rounded-2xl bg-[#fffaf0] px-5 py-3 min-h-[2.75rem] max-h-[200px]"
+            rows={1}
           />
           <Button
             className="rounded-full px-6"
