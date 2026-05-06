@@ -13,7 +13,7 @@ import { useSettingsStore, useResumeStore } from '@/store';
 import { createLLM } from '@/lib/llm';
 import { RESUME_PARSE_PROMPT, RESUME_GUIDE_SYSTEM_PROMPT } from '@/lib/prompts';
 import { parseResumeFile, isSupportedFileType } from '@/lib/resume-parser';
-import { saveExperiencePoolItem } from '@/lib/db';
+import { saveExperiencePoolItemsBatch } from '@/lib/db';
 import { useSpeechRecognition } from '@/lib/hooks/use-speech-recognition';
 import { v4 as uuidv4 } from 'uuid';
 import type { Resume, ExperiencePoolItem, ChatCompletionMessage, ContentPart } from '@/types';
@@ -156,13 +156,13 @@ function NewResumeContent() {
       const parsedData = JSON.parse(jsonMatch[0]);
       const now = new Date().toISOString();
 
-      // 将经历保存到经历池
-      const experienceIds: string[] = [];
-      const projectIds: string[] = [];
+      // 构建经历池条目
+      const experienceItems: ExperiencePoolItem[] = [];
+      const projectItems: ExperiencePoolItem[] = [];
 
       if (Array.isArray(parsedData.experience)) {
         for (const e of parsedData.experience) {
-          const poolItem: ExperiencePoolItem = {
+          experienceItems.push({
             id: uuidv4(),
             type: 'experience',
             company: e.company || '',
@@ -175,15 +175,13 @@ function NewResumeContent() {
             source: 'upload',
             createdAt: now,
             updatedAt: now,
-          };
-          await saveExperiencePoolItem(poolItem);
-          experienceIds.push(poolItem.id);
+          });
         }
       }
 
       if (Array.isArray(parsedData.projects)) {
         for (const p of parsedData.projects) {
-          const poolItem: ExperiencePoolItem = {
+          projectItems.push({
             id: uuidv4(),
             type: 'project',
             name: p.name || '',
@@ -194,11 +192,15 @@ function NewResumeContent() {
             source: 'upload',
             createdAt: now,
             updatedAt: now,
-          };
-          await saveExperiencePoolItem(poolItem);
-          projectIds.push(poolItem.id);
+          });
         }
       }
+
+      // 批量保存到经历池
+      await saveExperiencePoolItemsBatch([...experienceItems, ...projectItems]);
+
+      const experienceIds = experienceItems.map((e) => e.id);
+      const projectIds = projectItems.map((p) => p.id);
 
       const resume: Resume = {
         id: uuidv4(),
@@ -311,13 +313,13 @@ function NewResumeContent() {
       const parsedData = JSON.parse(jsonMatch[0]);
       const now = new Date().toISOString();
 
-      // 将经历保存到经历池
-      const experienceIds: string[] = [];
-      const projectIds: string[] = [];
+      // 构建经历池条目
+      const experienceItems: ExperiencePoolItem[] = [];
+      const projectItems: ExperiencePoolItem[] = [];
 
       if (Array.isArray(parsedData.experience)) {
         for (const e of parsedData.experience) {
-          const poolItem: ExperiencePoolItem = {
+          experienceItems.push({
             id: uuidv4(),
             type: 'experience',
             company: e.company || '',
@@ -330,15 +332,13 @@ function NewResumeContent() {
             source: 'upload',
             createdAt: now,
             updatedAt: now,
-          };
-          await saveExperiencePoolItem(poolItem);
-          experienceIds.push(poolItem.id);
+          });
         }
       }
 
       if (Array.isArray(parsedData.projects)) {
         for (const p of parsedData.projects) {
-          const poolItem: ExperiencePoolItem = {
+          projectItems.push({
             id: uuidv4(),
             type: 'project',
             name: p.name || '',
@@ -349,11 +349,15 @@ function NewResumeContent() {
             source: 'upload',
             createdAt: now,
             updatedAt: now,
-          };
-          await saveExperiencePoolItem(poolItem);
-          projectIds.push(poolItem.id);
+          });
         }
       }
+
+      // 批量保存到经历池
+      await saveExperiencePoolItemsBatch([...experienceItems, ...projectItems]);
+
+      const experienceIds = experienceItems.map((e) => e.id);
+      const projectIds = projectItems.map((p) => p.id);
 
       const resume: Resume = {
         id: uuidv4(),

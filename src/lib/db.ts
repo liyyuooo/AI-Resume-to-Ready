@@ -331,6 +331,14 @@ export async function deleteExperiencePoolItem(id: string): Promise<void> {
   await db.delete('experiences', id);
 }
 
+// 批量保存经历池条目（跳过去重检查，用于导入场景）
+export async function saveExperiencePoolItemsBatch(items: ExperiencePoolItem[]): Promise<void> {
+  const db = await getDB();
+  const tx = db.transaction('experiences', 'readwrite');
+  await Promise.all(items.map((item) => tx.store.put(item)));
+  await tx.done;
+}
+
 export async function resolveResume(resume: Resume): Promise<ResolvedResume> {
   const db = await getDB();
   const allExperiences = await getExperiencePoolItemsByIds(resume.experienceIds);
