@@ -104,6 +104,9 @@ async function migrateToExperiencePool(transaction: any) {
 }
 
 export async function getDB() {
+  if (typeof indexedDB === 'undefined') {
+    throw new Error('IndexedDB is not available (server-side rendering)');
+  }
   if (!dbPromise) {
     dbPromise = openDB<ResumeAIDB>(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion, _newVersion, transaction) {
