@@ -19,8 +19,13 @@ export const useSettingsStore = create<SettingsState>()(
 
       loadSettings: async () => {
         set({ isLoading: true });
-        const settings = await db.getSettings();
-        set({ settings: settings || null, isLoading: false });
+        try {
+          const settings = await db.getSettings();
+          set({ settings: settings || null, isLoading: false });
+        } catch (err) {
+          console.error('loadSettings failed:', err);
+          set({ isLoading: false });
+        }
       },
 
       updateSettings: async (newSettings) => {
@@ -56,8 +61,13 @@ export const useResumeStore = create<ResumeState>()((set, get) => ({
 
   loadResumes: async () => {
     set({ isLoading: true });
-    const resumes = await db.getAllResumes();
-    set({ resumes, isLoading: false });
+    try {
+      const resumes = await db.getAllResumes();
+      set({ resumes, isLoading: false });
+    } catch (err) {
+      console.error('loadResumes failed:', err);
+      set({ isLoading: false });
+    }
   },
 
   getResume: async (id: string) => {
@@ -107,8 +117,13 @@ export const useJDHistoryStore = create<JDHistoryState>()((set, get) => ({
 
   loadHistory: async () => {
     set({ isLoading: true });
-    const records = await db.getAllJDHistory();
-    set({ records, isLoading: false });
+    try {
+      const records = await db.getAllJDHistory();
+      set({ records, isLoading: false });
+    } catch (err) {
+      console.error('loadHistory failed:', err);
+      set({ isLoading: false });
+    }
   },
 
   addRecord: async (record) => {
@@ -131,8 +146,13 @@ export const useInterviewStore = create<InterviewState>()((set, get) => ({
 
   loadSessions: async () => {
     set({ isLoading: true });
-    const sessions = await db.getAllInterviews();
-    set({ sessions, isLoading: false });
+    try {
+      const sessions = await db.getAllInterviews();
+      set({ sessions, isLoading: false });
+    } catch (err) {
+      console.error('loadSessions failed:', err);
+      set({ isLoading: false });
+    }
   },
 
   setCurrentSession: (session) => {
@@ -169,8 +189,13 @@ export const useExperiencePoolStore = create<ExperiencePoolState>()((set, get) =
 
   loadItems: async () => {
     set({ isLoading: true });
-    const items = await db.getAllExperiencePoolItems();
-    set({ items, isLoading: false });
+    try {
+      const items = await db.getAllExperiencePoolItems();
+      set({ items, isLoading: false });
+    } catch (err) {
+      console.error('loadItems failed:', err);
+      set({ isLoading: false });
+    }
   },
 
   addItem: async (item) => {

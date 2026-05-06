@@ -138,7 +138,9 @@ export async function getDB() {
           expStore.createIndex('by-type', 'type');
 
           // 迁移旧简历数据：将内联 experience/projects 迁移到经历池
-          migrateToExperiencePool(transaction);
+          migrateToExperiencePool(transaction).catch((err) => {
+            console.error('Migration to v3 failed (non-fatal):', err);
+          });
         }
       },
     });
