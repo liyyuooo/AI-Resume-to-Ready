@@ -21,8 +21,15 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       const settings = await db.getSettings();
       set({ settings: settings || null, isLoading: false });
     } catch (err) {
-      console.error('loadSettings failed:', err);
-      set({ isLoading: false });
+      console.error('loadSettings failed, retrying:', err);
+      try {
+        await new Promise((r) => setTimeout(r, 600));
+        const settings = await db.getSettings();
+        set({ settings: settings || null, isLoading: false });
+      } catch (err2) {
+        console.error('loadSettings retry failed:', err2);
+        set({ isLoading: false });
+      }
     }
   },
 
@@ -185,8 +192,15 @@ export const useExperiencePoolStore = create<ExperiencePoolState>()((set, get) =
       const items = await db.getAllExperiencePoolItems();
       set({ items, isLoading: false });
     } catch (err) {
-      console.error('loadItems failed:', err);
-      set({ isLoading: false });
+      console.error('loadItems failed, retrying:', err);
+      try {
+        await new Promise((r) => setTimeout(r, 600));
+        const items = await db.getAllExperiencePoolItems();
+        set({ items, isLoading: false });
+      } catch (err2) {
+        console.error('loadItems retry failed:', err2);
+        set({ isLoading: false });
+      }
     }
   },
 

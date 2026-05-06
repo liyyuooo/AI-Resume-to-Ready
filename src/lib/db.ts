@@ -157,7 +157,7 @@ export async function getDB() {
 
     // 超时保护：IndexedDB blocked 时 openDB 不会 resolve/reject，防止永久挂起
     const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('IndexedDB open timeout after 10s')), 10000)
+      setTimeout(() => reject(new Error('IndexedDB open timeout')), 500)
     );
     dbPromise = Promise.race([openPromise, timeout]).catch((err) => {
       console.error('Failed to open IndexedDB:', err);
