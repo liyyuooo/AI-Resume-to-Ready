@@ -1,4 +1,4 @@
-import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { wrap, DBSchema, IDBPDatabase } from 'idb';
 import type { Resume, InterviewSession, UserSettings, JDHistoryRecord, ExperiencePoolItem, ResolvedResume } from '@/types';
 
 interface ResumeAIDB extends DBSchema {
@@ -32,24 +32,63 @@ const DB_NAME = 'resume-ai-assistant';
 const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBPDatabase<ResumeAIDB>> | null = null;
+let rawDB: IDBDatabase | null = null;
+
+// 在 IDBDatabase 上创建/升级所有 object stores
+function createStores(db: IDBDatabase, oldVersion: number) {
+  if (!db.objectStoreNames.contains('resumes')) {
+    const resumeStore = db.createObjectStore('resumes', { keyPath: 'id' });
+    resumeStore.createIndex('by-date', 'updatedAt');
+  }
+
+  if (!db.objectStoreNames.contains('interviews')) {
+    const interviewStore = db.createObjectStore('interviews', { keyPath: 'id' });
+    interviewStore.createIndex('by-date', 'updatedAt');
+    interviewStore.createIndex('by-resume', 'resumeId');
+  }
+
+  if (!db.objectStoreNames.contains('settings')) {
+    db.createObjectStore('settings', { keyPath: 'id' });
+  }
+
+  if (!db.objectStoreNames.contains('jdHistory')) {
+    const jdStore = db.createObjectStore('jdHistory', { keyPath: 'id' });
+    jdStore.createIndex('by-date', 'lastUsedAt');
+  }
+
+  if (!db.objectStoreNames.contains('experiences')) {
+    const expStore = db.createObjectStore('experiences', { keyPath: 'id' });
+    expStore.createIndex('by-date', 'updatedAt');
+    expStore.createIndex('by-type', 'type');
+  }
+}
 
 // 迁移旧格式简历（内联 experience/projects）到经历池引用模式
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function migrateToExperiencePool(transaction: any) {
-  const resumeStore = transaction.objectStore('resumes');
-  const expStore = transaction.objectStore('experiences');
+async function migrateToExperiencePool(db: IDBDatabase) {
+  const tx = db.transaction(['resumes', 'experiences'], 'readwrite');
+  const resumeStore = tx.objectStore('resumes');
+  const expStore = tx.objectStore('experiences');
   const now = new Date().toISOString();
 
-  let cursor = await resumeStore.openCursor();
-  while (cursor) {
-    const resume = (cursor as unknown as { value: unknown }).value as Resume & { experience?: ExperiencePoolItem[]; projects?: ExperiencePoolItem[] };
-    const oldExperience = (resume as unknown as Record<string, unknown>).experience as ExperiencePoolItem[] | undefined;
-    const oldProjects = (resume as unknown as Record<string, unknown>).projects as ExperiencePoolItem[] | undefined;
+  const resumes = await new Promise<unknown[]>((resolve, reject) => {
+    const request = resumeStore.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
 
-    const experienceIds: string[] = [];
-    const projectIds: string[] = [];
+  for (const r of resumes) {
+    const resume = r as Resume & { experience?: ExperiencePoolItem[]; projects?: ExperiencePoolItem[] };
+    const raw = resume as unknown as Record<string, unknown>;
+    const oldExperience = raw.experience as ExperiencePoolItem[] | undefined;
+    const oldProjects = raw.projects as ExperiencePoolItem[] | undefined;
 
-    // 迁移工作经历
+    if ((!oldExperience || oldExperience.length === 0) && (!oldProjects || oldProjects.length === 0)) {
+      continue;
+    }
+
+    const experienceIds: string[] = (raw.experienceIds as string[]) || [];
+    const projectIds: string[] = (raw.projectIds as string[]) || [];
+
     if (oldExperience && Array.isArray(oldExperience)) {
       for (const exp of oldExperience) {
         const poolItem: ExperiencePoolItem = {
@@ -66,12 +105,11 @@ async function migrateToExperiencePool(transaction: any) {
           createdAt: now,
           updatedAt: now,
         };
-        await expStore.put(poolItem);
+        expStore.put(poolItem);
         experienceIds.push(poolItem.id);
       }
     }
 
-    // 迁移项目经历
     if (oldProjects && Array.isArray(oldProjects)) {
       for (const proj of oldProjects) {
         const poolItem: ExperiencePoolItem = {
@@ -86,85 +124,156 @@ async function migrateToExperiencePool(transaction: any) {
           createdAt: now,
           updatedAt: now,
         };
-        await expStore.put(poolItem);
+        expStore.put(poolItem);
         projectIds.push(poolItem.id);
       }
     }
 
-    // 更新简历：使用 ID 引用，删除旧字段
-    const updatedResume = { ...resume };
-    delete (updatedResume as Record<string, unknown>).experience;
-    delete (updatedResume as Record<string, unknown>).projects;
-    (updatedResume as Record<string, unknown>).experienceIds = experienceIds;
-    (updatedResume as Record<string, unknown>).projectIds = projectIds;
+    delete raw.experience;
+    delete raw.projects;
+    raw.experienceIds = experienceIds;
+    raw.projectIds = projectIds;
 
-    await (cursor as unknown as { update: (value: unknown) => Promise<unknown> }).update(updatedResume as Resume);
-    cursor = await (cursor as unknown as { continue: () => Promise<typeof cursor> }).continue();
+    resumeStore.put(resume);
   }
+
+  await new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// 使用原生 IndexedDB API 打开数据库 —— 正确拒绝 blocked 事件
+// idb 的 openDB 在 blocked 时 promise 永不 resolve/reject，这里绕过它
+function nativeOpen(
+  name: string,
+  version: number | undefined,
+  onUpgrade: ((db: IDBDatabase, oldVersion: number) => void) | undefined,
+  timeoutMs: number
+): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = version !== undefined
+      ? indexedDB.open(name, version)
+      : indexedDB.open(name);
+
+    const timeout = setTimeout(() => {
+      reject(new Error('IndexedDB open timeout'));
+    }, timeoutMs);
+
+    request.onupgradeneeded = (event) => {
+      if (onUpgrade) {
+        onUpgrade(request.result, event.oldVersion);
+      }
+    };
+
+    request.onsuccess = () => {
+      clearTimeout(timeout);
+      resolve(request.result);
+    };
+
+    request.onerror = () => {
+      clearTimeout(timeout);
+      reject(request.error || new Error('IndexedDB open failed'));
+    };
+
+    request.onblocked = () => {
+      clearTimeout(timeout);
+      // 版本升级被旧连接阻塞 → 立即拒绝，让上层回退到无版本打开
+      reject(new Error('IndexedDB upgrade blocked by old connection'));
+    };
+  });
 }
 
 export async function getDB() {
   if (typeof indexedDB === 'undefined') {
     throw new Error('IndexedDB is not available (server-side rendering)');
   }
-  if (!dbPromise) {
-    const openPromise = openDB<ResumeAIDB>(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion, _newVersion, transaction) {
-        // 简历存储
-        if (!db.objectStoreNames.contains('resumes')) {
-          const resumeStore = db.createObjectStore('resumes', { keyPath: 'id' });
-          resumeStore.createIndex('by-date', 'updatedAt');
-        }
+  if (dbPromise) return dbPromise;
 
-        // 面试记录存储
-        if (!db.objectStoreNames.contains('interviews')) {
-          const interviewStore = db.createObjectStore('interviews', { keyPath: 'id' });
-          interviewStore.createIndex('by-date', 'updatedAt');
-          interviewStore.createIndex('by-resume', 'resumeId');
-        }
+  dbPromise = (async () => {
+    // === Tier 1: 尝试用目标版本打开（可能被旧 tab 的旧版本连接阻塞） ===
+    try {
+      const db = await nativeOpen(DB_NAME, DB_VERSION, createStores, 2000);
+      rawDB = db;
 
-        // 设置存储
-        if (!db.objectStoreNames.contains('settings')) {
-          db.createObjectStore('settings', { keyPath: 'id' });
-        }
-
-        // JD历史记录存储 (v2)
-        if (!db.objectStoreNames.contains('jdHistory')) {
-          const jdStore = db.createObjectStore('jdHistory', { keyPath: 'id' });
-          jdStore.createIndex('by-date', 'lastUsedAt');
-        }
-
-        // 经历池存储 (v3) + 数据迁移
-        if (oldVersion < 3) {
-          const expStore = db.createObjectStore('experiences', { keyPath: 'id' });
-          expStore.createIndex('by-date', 'updatedAt');
-          expStore.createIndex('by-type', 'type');
-
-          // 迁移旧简历数据：将内联 experience/projects 迁移到经历池
-          migrateToExperiencePool(transaction).catch((err) => {
-            console.error('Migration to v3 failed (non-fatal):', err);
-          });
-        }
-      },
-      blocked() {
-        // 数据库被旧版本连接阻塞
+      // 设置 onversionchange：当未来新版本尝试升级时，主动关闭当前连接
+      db.onversionchange = () => {
+        db.close();
+        rawDB = null;
         dbPromise = null;
-      },
-      terminated() {
-        dbPromise = null;
-      },
-    });
+      };
 
-    // 超时保护：IndexedDB blocked 时 openDB 不会 resolve/reject，防止永久挂起
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('IndexedDB open timeout')), 500)
-    );
-    dbPromise = Promise.race([openPromise, timeout]).catch((err) => {
-      console.error('Failed to open IndexedDB:', err);
+      return wrap(db) as unknown as IDBPDatabase<ResumeAIDB>;
+    } catch (err) {
+      console.warn('IndexedDB open with version upgrade failed:', err);
+    }
+
+    // === Tier 2: 回退到无版本打开（不触发 upgrade，永远不会 block） ===
+    try {
+      const db = await nativeOpen(DB_NAME, undefined, undefined, 5000);
+      rawDB = db;
+
+      db.onversionchange = () => {
+        db.close();
+        rawDB = null;
+        dbPromise = null;
+      };
+
+      const wrapped = wrap(db) as unknown as IDBPDatabase<ResumeAIDB>;
+
+      // 检查是否需要迁移旧格式数据（v2→v3）
+      if (!db.objectStoreNames.contains('experiences')) {
+        console.log('DB needs migration — running v2→v3 migration in app code');
+        // 关闭当前连接，重新用目标版本打开以触发 upgrade
+        db.close();
+        rawDB = null;
+
+        const migratedDB = await nativeOpen(DB_NAME, DB_VERSION, (idb, oldVersion) => {
+          createStores(idb, oldVersion);
+        }, 5000);
+
+        // 检查是否有旧简历数据需要迁移
+        const hasResumes = migratedDB.objectStoreNames.contains('resumes');
+        let needsMigration = false;
+        if (hasResumes) {
+          try {
+            const checkTx = migratedDB.transaction('resumes', 'readonly');
+            const resumes = await new Promise<unknown[]>((resolve, reject) => {
+              const req = checkTx.objectStore('resumes').getAll();
+              req.onsuccess = () => resolve(req.result);
+              req.onerror = () => reject(req.error);
+            });
+            needsMigration = resumes.some((r) => {
+              const raw = r as unknown as Record<string, unknown>;
+              return (raw.experience && Array.isArray(raw.experience) && raw.experience.length > 0)
+                || (raw.projects && Array.isArray(raw.projects) && raw.projects.length > 0);
+            });
+          } catch {
+            // 检查失败，跳过迁移
+          }
+        }
+
+        if (needsMigration) {
+          await migrateToExperiencePool(migratedDB);
+        }
+
+        migratedDB.onversionchange = () => {
+          migratedDB.close();
+          rawDB = null;
+          dbPromise = null;
+        };
+        rawDB = migratedDB;
+        return wrap(migratedDB) as unknown as IDBPDatabase<ResumeAIDB>;
+      }
+
+      return wrapped;
+    } catch (err2) {
+      console.error('IndexedDB fallback open also failed:', err2);
       dbPromise = null;
-      throw err;
-    });
-  }
+      throw err2;
+    }
+  })();
+
   return dbPromise;
 }
 
