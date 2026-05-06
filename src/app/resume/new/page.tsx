@@ -27,7 +27,7 @@ function NewResumeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const mode = searchParams.get('mode') || 'import';
-  const { settings } = useSettingsStore();
+  const { settings, hasHydrated } = useSettingsStore();
   const { saveResume } = useResumeStore();
 
   const [resumeText, setResumeText] = useState('');
@@ -125,6 +125,10 @@ function NewResumeContent() {
 
   const handleImport = async () => {
     if (!resumeText.trim()) return;
+    if (!hasHydrated) {
+      setParseError('页面正在初始化，请稍后再试。');
+      return;
+    }
     if (!settings?.apiKey) {
       setParseError('请先前往设置页面配置 API Key，否则无法解析简历内容。');
       return;

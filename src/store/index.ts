@@ -7,8 +7,10 @@ import * as db from '@/lib/db';
 interface SettingsState {
   settings: UserSettings | null;
   isLoading: boolean;
+  hasHydrated: boolean;
   loadSettings: () => Promise<void>;
   updateSettings: (settings: Partial<UserSettings>) => Promise<void>;
+  setHasHydrated: (value: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -16,6 +18,7 @@ export const useSettingsStore = create<SettingsState>()(
     (set, get) => ({
       settings: null,
       isLoading: true,
+      hasHydrated: false,
 
       loadSettings: async () => {
         set({ isLoading: true });
@@ -34,10 +37,18 @@ export const useSettingsStore = create<SettingsState>()(
         await db.saveSettings(updated);
         set({ settings: updated });
       },
+
+      setHasHydrated: (value: boolean) => {
+        set({ hasHydrated: value });
+      },
     }),
     {
       name: 'settings-cache',
       partialize: (state) => ({ settings: state.settings }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+        state?.loadSettings();
+      },
     }
   )
 );
