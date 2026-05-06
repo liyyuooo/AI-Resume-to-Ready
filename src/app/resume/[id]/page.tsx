@@ -72,6 +72,7 @@ export default function ResumeEditPage() {
     analysis: false,
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
 
@@ -198,11 +199,14 @@ export default function ResumeEditPage() {
   const handleSave = async () => {
     if (!resume) return;
     setIsSaving(true);
+    setSaveSuccess(false);
     try {
       await saveResume({
         ...resume,
         updatedAt: new Date().toISOString(),
       });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 1500);
     } finally {
       setIsSaving(false);
     }
@@ -353,8 +357,17 @@ export default function ResumeEditPage() {
             开始面试
           </Button>
           <Button onClick={handleSave} disabled={isSaving}>
-            <Save className="h-4 w-4 mr-2" />
-            {isSaving ? '保存中...' : '保存'}
+            {saveSuccess ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
+                已保存
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                {isSaving ? '保存中...' : '保存'}
+              </>
+            )}
           </Button>
         </div>
       </div>
