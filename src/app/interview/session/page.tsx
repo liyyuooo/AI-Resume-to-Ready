@@ -11,7 +11,12 @@ import { createLLM } from '@/lib/llm';
 import { getInterviewSystemPrompt } from '@/lib/prompts';
 import { useSpeechRecognition } from '@/lib/hooks/use-speech-recognition';
 import { v4 as uuidv4 } from 'uuid';
-import type { InterviewSession, InterviewType, Message, ChatCompletionMessage } from '@/types';
+import type { InterviewSession, InterviewType, Message, ChatCompletionMessage, ContentPart } from '@/types';
+
+const getContentText = (content: string | ContentPart[]): string => {
+  if (typeof content === 'string') return content;
+  return content.filter((p) => p.type === 'text').map((p) => p.text).join('');
+};
 
 const interviewTypes: Record<InterviewType, string> = {
   'job-targeted': '岗位针对性问答',
@@ -289,7 +294,7 @@ function InterviewSessionContent() {
                       : 'rounded-bl-[2rem] rounded-br-[1.5rem] rounded-tl-[0.5rem] bg-white text-[#231915] shadow-sm'
                   }`}
                 >
-                  <div className="whitespace-pre-wrap">{message.content}</div>
+                  <div className="whitespace-pre-wrap">{getContentText(message.content)}</div>
                 </div>
               </div>
             ))}

@@ -1,17 +1,18 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, FileText, Sparkles, Target, Clock, History, Users, GraduationCap, Shuffle, Settings } from 'lucide-react';
+import { ArrowRight, FileText, Sparkles, Target, Clock, History, Users, GraduationCap, Shuffle, Settings, Layers, PenLine } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useSettingsStore, useResumeStore, useInterviewStore } from '@/store';
 
 const features = [
   {
     icon: FileText,
     title: '导入与解析',
-    description: '支持 PDF / Word / 文本，AI 自动抽取结构化信息。',
+    description: '支持 PDF / Word / 文本，AI 自动抽取结构化信息并加入经验池。',
     href: '/resume/new?mode=import',
     tone: 'blob-lilac',
   },
@@ -23,18 +24,25 @@ const features = [
     tone: 'blob-sand',
   },
   {
-    icon: Target,
-    title: 'JD 匹配分析',
-    description: '简历 vs JD 对齐，找出缺口、关键词和改写方向。',
-    href: '/interview?mode=match',
+    icon: Layers,
+    title: '经历素材池',
+    description: '集中管理工作和项目经历，支持语音输入补充细节，简历上传自动归集。',
+    href: '/experience-pool',
     tone: 'blob-mint',
+  },
+  {
+    icon: Target,
+    title: '目标岗位 & JD 匹配',
+    description: '管理目标岗位列表，一键分析 JD 差距，AI 从经历池挑选并创建定制简历。',
+    href: '/target-jobs',
+    tone: 'blob-lilac',
   },
   {
     icon: Users,
     title: '多类型模拟面试',
     description: '岗位问答 / 简历深问 / 行为面试 / 技术题，多轮实战。',
     href: '/interview',
-    tone: 'blob-lilac',
+    tone: 'blob-sand',
   },
 ];
 
@@ -48,8 +56,13 @@ const interviewTypeLabels: Record<string, string> = {
 export default function HomePage() {
   const router = useRouter();
   const { loadSettings, isLoading: settingsLoading } = useSettingsStore();
-  const { loadResumes, resumes } = useResumeStore();
-  const { loadSessions, sessions } = useInterviewStore();
+  const { loadResumes, resumes, saveResume } = useResumeStore();
+  const { loadSessions, sessions, saveSession } = useInterviewStore();
+
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [editingCardName, setEditingCardName] = useState('');
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingSessionTitle, setEditingSessionTitle] = useState('');
 
   useEffect(() => {
     loadSettings();
@@ -195,7 +208,7 @@ export default function HomePage() {
       <section className="mx-auto mt-8 max-w-6xl px-4 sm:px-6">
         <div className="paper-card px-6 py-10 sm:px-8 lg:px-12">
           <h2 className="mb-8 text-3xl font-semibold tracking-tight">核心功能</h2>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             {features.map((feature) => {
               const Icon = feature.icon;
               return (
@@ -260,16 +273,49 @@ export default function HomePage() {
                   >
                     <CardContent className="space-y-4 p-5">
                       <div className={`flex min-h-[8.5rem] items-end rounded-[1.7rem] px-6 py-5 shadow-md ${index % 2 === 0 ? 'blob-lilac' : 'blob-sand'}`}>
-                        <div>
+                        <div className="w-full">
                           <p className="text-xs font-medium uppercase tracking-[0.22em] text-[#3d342f]/55">Resume</p>
-                          <h4 className="mt-2 text-3xl font-semibold tracking-tight text-[#221915]">
-                            {resume.experience[0]?.title || resume.basicInfo.name || '未命名简历'}
-                          </h4>
+                          {editingCardId === resume.id ? (
+                            <Input
+                              value={editingCardName}
+                              onChange={(e) => setEditingCardName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  saveResume({ ...resume, name: editingCardName, updatedAt: new Date().toISOString() });
+                                  setEditingCardId(null);
+                                }
+                                if (e.key === 'Escape') setEditingCardId(null);
+                              }}
+                              onBlur={() => {
+                                saveResume({ ...resume, name: editingCardName || resume.basicInfo.name || '未命名简历', updatedAt: new Date().toISOString() });
+                                setEditingCardId(null);
+                              }}
+                              className="mt-1 text-xl font-semibold bg-white/50 border-0 rounded-[0.8rem] h-auto py-1 px-2"
+                              autoFocus
+                            />
+                          ) : (
+                            <div className="flex items-center gap-2 mt-2">
+                              <h4 className="text-3xl font-semibold tracking-tight text-[#221915]">
+                                {resume.name || resume.basicInfo.name || '未命名简历'}
+                              </h4>
+                              <button
+                                className="opacity-50 hover:opacity-100 transition-opacity"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingCardId(resume.id);
+                                  setEditingCardName(resume.name || resume.basicInfo.name || '');
+                                }}
+                                title="点击编辑标题"
+                              >
+                                <PenLine className="h-4 w-4 text-[#3d342f]/50 hover:text-[#3d342f]/80" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div>
                         <p className="text-sm text-[#473a34]">
-                          {resume.experience[0]?.title || '暂无工作经历'}
+                          {resume.experienceIds.length > 0 ? '有工作经历' : '暂无工作经历'}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
                           更新于 {new Date(resume.updatedAt).toLocaleDateString('zh-CN')}
@@ -320,11 +366,44 @@ export default function HomePage() {
                   >
                     <CardContent className="space-y-4 p-5">
                       <div className={`flex min-h-[7.75rem] items-end rounded-[1.65rem] px-6 py-5 shadow-md ${index % 2 === 0 ? 'blob-mint' : 'blob-lilac'}`}>
-                        <div>
+                        <div className="w-full">
                           <p className="text-xs font-medium uppercase tracking-[0.22em] text-[#3d342f]/55">Interview</p>
-                          <h4 className="mt-2 text-2xl font-semibold tracking-tight text-[#221915]">
-                            {session.targetRole || interviewTypeLabels[session.type] || session.type}
-                          </h4>
+                          {editingSessionId === session.id ? (
+                            <Input
+                              value={editingSessionTitle}
+                              onChange={(e) => setEditingSessionTitle(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  saveSession({ ...session, targetRole: editingSessionTitle, updatedAt: new Date().toISOString() });
+                                  setEditingSessionId(null);
+                                }
+                                if (e.key === 'Escape') setEditingSessionId(null);
+                              }}
+                              onBlur={() => {
+                                saveSession({ ...session, targetRole: editingSessionTitle || undefined, updatedAt: new Date().toISOString() });
+                                setEditingSessionId(null);
+                              }}
+                              className="mt-1 text-xl font-semibold bg-white/50 border-0 rounded-[0.8rem] h-auto py-1 px-2"
+                              autoFocus
+                            />
+                          ) : (
+                            <div className="flex items-center gap-2 mt-2">
+                              <h4 className="text-2xl font-semibold tracking-tight text-[#221915]">
+                                {session.targetRole || interviewTypeLabels[session.type] || session.type}
+                              </h4>
+                              <button
+                                className="opacity-50 hover:opacity-100 transition-opacity"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingSessionId(session.id);
+                                  setEditingSessionTitle(session.targetRole || interviewTypeLabels[session.type] || session.type);
+                                }}
+                                title="点击编辑标题"
+                              >
+                                <PenLine className="h-4 w-4 text-[#3d342f]/50 hover:text-[#3d342f]/80" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div>

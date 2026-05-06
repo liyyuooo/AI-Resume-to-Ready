@@ -21,6 +21,7 @@ const PRESET_OPTIONS = [
   { value: 'custom', label: '自定义' },
   { value: 'openai', label: 'OpenAI' },
   { value: 'claude', label: 'Claude (Anthropic)' },
+  { value: 'bailian', label: '阿里云百炼 (DashScope)' },
   { value: 'qianfanOpenAI', label: '百度千帆（OpenAI 兼容）' },
   { value: 'qianfanAnthropic', label: '百度千帆（Anthropic 兼容）' },
   { value: 'zhipu', label: '智谱 AI' },
@@ -31,6 +32,7 @@ const PRESET_OPTIONS = [
 const DEFAULT_MODELS: Record<string, string> = {
   openai: 'gpt-4o',
   claude: 'claude-sonnet-4-20250514',
+  bailian: 'qwen-plus',
   qianfanOpenAI: 'ernie-4.5-8k-preview',
   qianfanAnthropic: 'claude-sonnet-4-20250514',
   zhipu: 'glm-4',
@@ -47,6 +49,7 @@ export default function SettingsPage() {
   const [model, setModel] = useState(settings?.model || '');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
+  const [testErrorMsg, setTestErrorMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -73,6 +76,7 @@ export default function SettingsPage() {
     } catch (error) {
       console.error('Test error:', error);
       setTestResult('error');
+      setTestErrorMsg(error instanceof Error ? error.message : '未知错误');
     } finally {
       setIsTesting(false);
     }
@@ -221,22 +225,27 @@ export default function SettingsPage() {
 
               {testResult && (
                 <div
-                  className={`flex items-center gap-2 rounded-[1.2rem] px-4 py-3 text-sm ${
+                  className={`rounded-[1.2rem] px-4 py-3 text-sm ${
                     testResult === 'success'
                       ? 'bg-[#d9e7cf] text-[#1a3d12]'
                       : 'bg-[#f7d7d7] text-[#5c1212]'
                   }`}
                 >
-                  {testResult === 'success' ? (
-                    <>
-                      <Check className="h-4 w-4" />
-                      API 连接成功
-                    </>
-                  ) : (
-                    <>
-                      <AlertCircle className="h-4 w-4" />
-                      API 连接失败，请检查配置
-                    </>
+                  <div className="flex items-center gap-2">
+                    {testResult === 'success' ? (
+                      <>
+                        <Check className="h-4 w-4 shrink-0" />
+                        API 连接成功
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        API 连接失败
+                      </>
+                    )}
+                  </div>
+                  {testResult === 'error' && testErrorMsg && (
+                    <p className="mt-1.5 break-all text-xs opacity-75">{testErrorMsg}</p>
                   )}
                 </div>
               )}

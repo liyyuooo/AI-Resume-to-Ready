@@ -7,9 +7,15 @@ export interface Resume {
 
   basicInfo: BasicInfo;
   education: Education[];
-  experience: Experience[];
-  projects: Project[];
+  experienceIds: string[];
+  projectIds: string[];
   skills: Skill[];
+}
+
+// 展开后的简历（从池中解析出完整经历）
+export interface ResolvedResume extends Omit<Resume, 'experienceIds' | 'projectIds'> {
+  experience: ExperiencePoolItem[];
+  projects: ExperiencePoolItem[];
 }
 
 export interface BasicInfo {
@@ -93,14 +99,64 @@ export interface UserSettings {
   yearsOfExperience?: number;
 }
 
+// LLM Vision 支持
+export interface TextContentPart {
+  type: 'text';
+  text: string;
+}
+
+export interface ImageContentPart {
+  type: 'image_url';
+  image_url: {
+    url: string;
+    detail?: 'low' | 'high' | 'auto';
+  };
+}
+
+export type ContentPart = TextContentPart | ImageContentPart;
+
 // LLM相关
 export interface ChatCompletionMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | ContentPart[];
 }
 
 export interface LLMConfig {
   apiUrl: string;
   apiKey: string;
   model: string;
+}
+
+// JD 历史记录
+export interface JDHistoryRecord {
+  id: string;
+  title: string;
+  targetRole?: string;
+  targetCompany?: string;
+  jobDescription: string;
+  createdAt: string;
+  lastUsedAt: string;
+}
+
+// 经历池
+export type PoolItemType = 'experience' | 'project';
+
+export interface ExperiencePoolItem {
+  id: string;
+  type: PoolItemType;
+  company?: string;
+  title?: string;
+  startDate?: string;
+  endDate?: string;
+  location?: string;
+  responsibilities?: string[];
+  achievements?: string[];
+  name?: string;
+  role?: string;
+  description?: string;
+  technologies?: string[];
+  highlights?: string[];
+  source: 'upload' | 'manual' | 'conversation';
+  createdAt: string;
+  updatedAt: string;
 }

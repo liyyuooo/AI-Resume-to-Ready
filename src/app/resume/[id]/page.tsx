@@ -21,12 +21,22 @@ import {
   Sparkles,
   AlertCircle,
   CheckCircle2,
+  History,
+  ImageIcon,
+  FileText,
+  Wand2,
+  PenLine,
 } from 'lucide-react';
-import { useResumeStore, useSettingsStore } from '@/store';
+import { useResumeStore, useSettingsStore, useJDHistoryStore, useExperiencePoolStore } from '@/store';
 import { createLLM } from '@/lib/llm';
-import { getJDAnalysisPrompt } from '@/lib/prompts';
+import { getJDAnalysisPrompt, getApplyOptimizationPrompt } from '@/lib/prompts';
+import { JDImageUpload } from '@/components/resume/jd-image-upload';
+import { JDHistoryPanel } from '@/components/resume/jd-history-panel';
+import { PoolSelector } from '@/components/experience-pool/pool-selector';
+import { PoolResolvedDisplay } from '@/components/experience-pool/pool-resolved-display';
 import { v4 as uuidv4 } from 'uuid';
-import type { Resume, Experience, Education, Project, Skill } from '@/types';
+import type { Resume, Education, Skill, ResolvedResume, ExperiencePoolItem } from '@/types';
+import { resolveResume as resolveResumeDB } from '@/lib/db';
 
 interface JDAnalysisResult {
   matchScore: number;
@@ -61,6 +71,8 @@ export default function ResumeEditPage() {
     analysis: false,
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
 
   // JD 分析相关状态
   const [targetRole, setTargetRole] = useState('');
@@ -69,12 +81,33 @@ export default function ResumeEditPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<JDAnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [jdInputMode, setJdInputMode] = useState<'text' | 'image'>('text');
+  const [showHistory, setShowHistory] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [optimizeError, setOptimizeError] = useState<string | null>(null);
+  const [resolvedResume, setResolvedResume] = useState<ResolvedResume | null>(null);
+  const [showExpSelector, setShowExpSelector] = useState(false);
+  const [showProjSelector, setShowProjSelector] = useState(false);
+  const { addRecord } = useJDHistoryStore();
+  const { loadItems: loadPool } = useExperiencePoolStore();
 
   useEffect(() => {
     const loadResume = async () => {
       const data = await getResume(resumeId);
       if (data) {
         setResume(data);
+        // 如果有经历池引用，解析出来
+        if (data.experienceIds?.length > 0 || data.projectIds?.length > 0) {
+          const resolved = await resolveResumeDB(data);
+          setResolvedResume(resolved);
+        } else {
+          // 旧格式兼容：内联数据
+          setResolvedResume({
+            ...data,
+            experience: (data as unknown as Record<string, unknown>).experience as ExperiencePoolItem[] || [],
+            projects: (data as unknown as Record<string, unknown>).projects as ExperiencePoolItem[] || [],
+          } as unknown as ResolvedResume);
+        }
       } else {
         router.push('/resume');
       }
@@ -91,42 +124,6 @@ export default function ResumeEditPage() {
     setResume({
       ...resume,
       basicInfo: { ...resume.basicInfo, [field]: value },
-    });
-  };
-
-  const addExperience = () => {
-    if (!resume) return;
-    const newExp: Experience = {
-      id: uuidv4(),
-      company: '',
-      title: '',
-      startDate: '',
-      endDate: '',
-      location: '',
-      responsibilities: [],
-      achievements: [],
-    };
-    setResume({
-      ...resume,
-      experience: [...resume.experience, newExp],
-    });
-  };
-
-  const updateExperience = (id: string, field: string, value: string | string[]) => {
-    if (!resume) return;
-    setResume({
-      ...resume,
-      experience: resume.experience.map((exp) =>
-        exp.id === id ? { ...exp, [field]: value } : exp
-      ),
-    });
-  };
-
-  const removeExperience = (id: string) => {
-    if (!resume) return;
-    setResume({
-      ...resume,
-      experience: resume.experience.filter((exp) => exp.id !== id),
     });
   };
 
@@ -162,40 +159,6 @@ export default function ResumeEditPage() {
     setResume({
       ...resume,
       education: resume.education.filter((edu) => edu.id !== id),
-    });
-  };
-
-  const addProject = () => {
-    if (!resume) return;
-    const newProj: Project = {
-      id: uuidv4(),
-      name: '',
-      role: '',
-      description: '',
-      technologies: [],
-      highlights: [],
-    };
-    setResume({
-      ...resume,
-      projects: [...resume.projects, newProj],
-    });
-  };
-
-  const updateProject = (id: string, field: string, value: string | string[]) => {
-    if (!resume) return;
-    setResume({
-      ...resume,
-      projects: resume.projects.map((proj) =>
-        proj.id === id ? { ...proj, [field]: value } : proj
-      ),
-    });
-  };
-
-  const removeProject = (id: string) => {
-    if (!resume) return;
-    setResume({
-      ...resume,
-      projects: resume.projects.filter((proj) => proj.id !== id),
     });
   };
 
@@ -268,11 +231,66 @@ export default function ResumeEditPage() {
       const result: JDAnalysisResult = JSON.parse(jsonMatch[0]);
       setAnalysisResult(result);
       setExpandedSections((prev) => ({ ...prev, analysis: true }));
+
+      // 自动保存到 JD 历史
+      addRecord({
+        id: uuidv4(),
+        title: jobDescription.trim().replace(/\n/g, ' ').substring(0, 50),
+        targetRole: targetRole || undefined,
+        targetCompany: targetCompany || undefined,
+        jobDescription: jobDescription.trim(),
+        createdAt: new Date().toISOString(),
+        lastUsedAt: new Date().toISOString(),
+      });
     } catch (error) {
       console.error('Analysis error:', error);
       setAnalysisError(error instanceof Error ? error.message : '分析失败，请重试');
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleOptimize = async () => {
+    if (!resume || !settings?.apiKey || !analysisResult) return;
+
+    setIsOptimizing(true);
+    setOptimizeError(null);
+
+    try {
+      const llm = await createLLM({
+        apiUrl: settings.apiUrl,
+        apiKey: settings.apiKey,
+        model: settings.model,
+      });
+
+      // Build a full resume-like object for the LLM using resolved data
+      const resumeForOptimize = {
+        ...resume,
+        experience: resolvedResume?.experience || [],
+        projects: resolvedResume?.projects || [],
+      };
+      const prompt = getApplyOptimizationPrompt(resumeForOptimize as unknown as Resume, analysisResult.suggestions);
+      const response = await llm.chatWithSystem(prompt, []);
+
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('无法解析优化结果');
+      }
+
+      const optimized = JSON.parse(jsonMatch[0]);
+
+      // Only update non-pool fields (basic info, education, skills)
+      setResume({
+        ...resume,
+        basicInfo: { ...resume.basicInfo, ...(optimized.basicInfo || {}) },
+        skills: optimized.skills || resume.skills,
+        education: optimized.education || resume.education,
+      });
+    } catch (error) {
+      console.error('Optimize error:', error);
+      setOptimizeError(error instanceof Error ? error.message : '优化失败，请重试');
+    } finally {
+      setIsOptimizing(false);
     }
   };
 
@@ -288,8 +306,44 @@ export default function ResumeEditPage() {
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold">编辑简历</h1>
-          <p className="text-muted-foreground">{resume.basicInfo.name || '未命名简历'}</p>
+          <h1 className="text-xl font-semibold tracking-tight">编辑简历</h1>
+          {isEditingName ? (
+            <Input
+              value={editNameValue}
+              onChange={(e) => setEditNameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const updated = { ...resume, name: editNameValue || resume.basicInfo.name || '未命名简历', updatedAt: new Date().toISOString() };
+                  setResume(updated);
+                  saveResume(updated);
+                  setIsEditingName(false);
+                }
+                if (e.key === 'Escape') setIsEditingName(false);
+              }}
+              onBlur={() => {
+                const updated = { ...resume, name: editNameValue || resume.basicInfo.name || '未命名简历', updatedAt: new Date().toISOString() };
+                setResume(updated);
+                saveResume(updated);
+                setIsEditingName(false);
+              }}
+              className="mt-1 text-sm bg-white border-0 rounded-[0.8rem] h-auto py-1 px-2 w-64"
+              autoFocus
+            />
+          ) : (
+            <div className="flex items-center gap-1.5 mt-1">
+              <p className="text-sm text-muted-foreground">{resume.name || resume.basicInfo.name || '未命名简历'}</p>
+              <button
+                className="opacity-50 hover:opacity-100 transition-opacity"
+                onClick={() => {
+                  setIsEditingName(true);
+                  setEditNameValue(resume.name || resume.basicInfo.name || '');
+                }}
+                title="点击编辑简历名称"
+              >
+                <PenLine className="h-3.5 w-3.5 text-[#3d342f]/50 hover:text-[#3d342f]/80" />
+              </button>
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => router.push(`/interview?resumeId=${resumeId}`)}>
@@ -345,16 +399,74 @@ export default function ResumeEditPage() {
                 />
               </div>
             </div>
+
+            {/* JD 输入模式切换 */}
             <div className="space-y-2">
-              <Label>岗位描述（JD）</Label>
-              <Textarea
-                value={jobDescription}
-                onChange={(e) => setJobDescription(e.target.value)}
-                placeholder="粘贴目标岗位的 JD 内容..."
-                rows={6}
-                className="rounded-[1.4rem] bg-white"
-              />
+              <div className="flex items-center justify-between">
+                <Label>岗位描述（JD）</Label>
+                <div className="flex items-center gap-2">
+                  <div className="flex rounded-full bg-[#e8dfcb] p-0.5">
+                    <button
+                      type="button"
+                      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition ${
+                        jdInputMode === 'text' ? 'bg-[#171412] text-[#f7eed8]' : 'text-muted-foreground'
+                      }`}
+                      onClick={() => setJdInputMode('text')}
+                    >
+                      <FileText className="h-3 w-3" />
+                      文字
+                    </button>
+                    <button
+                      type="button"
+                      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition ${
+                        jdInputMode === 'image' ? 'bg-[#171412] text-[#f7eed8]' : 'text-muted-foreground'
+                      }`}
+                      onClick={() => setJdInputMode('image')}
+                    >
+                      <ImageIcon className="h-3 w-3" />
+                      截图
+                    </button>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full text-xs text-muted-foreground hover:text-[#171412]"
+                    onClick={() => setShowHistory(true)}
+                  >
+                    <History className="h-3 w-3 mr-1" />
+                    历史记录
+                  </Button>
+                </div>
+              </div>
+
+              {jdInputMode === 'text' ? (
+                <Textarea
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
+                  placeholder="粘贴目标岗位的 JD 内容..."
+                  rows={6}
+                  className="rounded-[1.4rem] bg-white"
+                />
+              ) : (
+                <JDImageUpload
+                  onTextExtracted={(text) => {
+                    setJobDescription(text);
+                    setJdInputMode('text');
+                  }}
+                />
+              )}
             </div>
+
+            {/* 历史记录面板 */}
+            <JDHistoryPanel
+              open={showHistory}
+              onOpenChange={setShowHistory}
+              onSelect={(jd) => {
+                setJobDescription(jd.jobDescription);
+                if (jd.targetRole) setTargetRole(jd.targetRole);
+                if (jd.targetCompany) setTargetCompany(jd.targetCompany);
+              }}
+            />
             <Button
               className="w-full rounded-full"
               onClick={handleAnalyze}
@@ -465,6 +577,33 @@ export default function ResumeEditPage() {
                     ))}
                   </div>
                 </div>
+
+                {/* 一键优化按钮 */}
+                <Button
+                  className="w-full rounded-full"
+                  variant="secondary"
+                  onClick={handleOptimize}
+                  disabled={isOptimizing}
+                >
+                  {isOptimizing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      AI 正在应用优化建议...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="h-4 w-4 mr-2" />
+                      一键应用优化建议
+                    </>
+                  )}
+                </Button>
+
+                {optimizeError && (
+                  <div className="rounded-[1.5rem] bg-red-50 border border-red-200 px-5 py-4 text-sm text-red-700 flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                    {optimizeError}
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
@@ -605,95 +744,34 @@ export default function ResumeEditPage() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">工作经历</CardTitle>
             <div className="flex items-center gap-2">
-              <Badge variant="secondary">{resume.experience.length}</Badge>
+              <Badge variant="secondary">{resolvedResume?.experience.length || 0}</Badge>
               {expandedSections.experience ? <ChevronUp /> : <ChevronDown />}
             </div>
           </div>
         </CardHeader>
         {expandedSections.experience && (
           <CardContent className="space-y-4">
-            {resume.experience.map((exp, idx) => (
-              <div key={exp.id}>
-                {idx > 0 && <Separator className="mb-4" />}
-                <div className="flex justify-between items-start mb-2">
-                  <span className="font-medium">工作经历 {idx + 1}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeExperience(exp.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-                <div className="grid gap-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>公司</Label>
-                      <Input
-                        value={exp.company}
-                        onChange={(e) => updateExperience(exp.id, 'company', e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>职位</Label>
-                      <Input
-                        value={exp.title}
-                        onChange={(e) => updateExperience(exp.id, 'title', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="space-y-2">
-                      <Label>开始时间</Label>
-                      <Input
-                        value={exp.startDate}
-                        onChange={(e) => updateExperience(exp.id, 'startDate', e.target.value)}
-                        placeholder="YYYY-MM"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>结束时间</Label>
-                      <Input
-                        value={exp.endDate}
-                        onChange={(e) => updateExperience(exp.id, 'endDate', e.target.value)}
-                        placeholder="YYYY-MM 或 至今"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>地点</Label>
-                      <Input
-                        value={exp.location || ''}
-                        onChange={(e) => updateExperience(exp.id, 'location', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>主要职责（每行一条）</Label>
-                    <Textarea
-                      value={exp.responsibilities.join('\n')}
-                      onChange={(e) =>
-                        updateExperience(exp.id, 'responsibilities', e.target.value.split('\n').filter(Boolean))
-                      }
-                      rows={3}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>主要成就（每行一条）</Label>
-                    <Textarea
-                      value={exp.achievements.join('\n')}
-                      onChange={(e) =>
-                        updateExperience(exp.id, 'achievements', e.target.value.split('\n').filter(Boolean))
-                      }
-                      rows={3}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-            <Button variant="outline" onClick={addExperience}>
+            {resolvedResume && (
+              <PoolResolvedDisplay type="experience" items={resolvedResume.experience} />
+            )}
+            <Button variant="outline" onClick={() => { loadPool(); setShowExpSelector(true); }}>
               <Plus className="h-4 w-4 mr-2" />
-              添加工作经历
+              从经验池选择工作经历
             </Button>
+            {resume && (
+              <PoolSelector
+                open={showExpSelector}
+                onOpenChange={setShowExpSelector}
+                type="experience"
+                selectedIds={resume.experienceIds}
+                onConfirm={async (ids) => {
+                  const updated = { ...resume, experienceIds: ids };
+                  setResume(updated);
+                  const resolved = await resolveResumeDB(updated);
+                  setResolvedResume(resolved);
+                }}
+              />
+            )}
           </CardContent>
         )}
       </Card>
@@ -707,81 +785,34 @@ export default function ResumeEditPage() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">项目经历</CardTitle>
             <div className="flex items-center gap-2">
-              <Badge variant="secondary">{resume.projects.length}</Badge>
+              <Badge variant="secondary">{resolvedResume?.projects.length || 0}</Badge>
               {expandedSections.projects ? <ChevronUp /> : <ChevronDown />}
             </div>
           </div>
         </CardHeader>
         {expandedSections.projects && (
           <CardContent className="space-y-4">
-            {resume.projects.map((proj, idx) => (
-              <div key={proj.id}>
-                {idx > 0 && <Separator className="mb-4" />}
-                <div className="flex justify-between items-start mb-2">
-                  <span className="font-medium">项目 {idx + 1}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => removeProject(proj.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-                <div className="grid gap-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>项目名称</Label>
-                      <Input
-                        value={proj.name}
-                        onChange={(e) => updateProject(proj.id, 'name', e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>角色</Label>
-                      <Input
-                        value={proj.role}
-                        onChange={(e) => updateProject(proj.id, 'role', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>项目描述</Label>
-                    <Textarea
-                      value={proj.description}
-                      onChange={(e) => updateProject(proj.id, 'description', e.target.value)}
-                      rows={2}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>技术栈（逗号分隔）</Label>
-                    <Input
-                      value={proj.technologies.join(', ')}
-                      onChange={(e) =>
-                        updateProject(
-                          proj.id,
-                          'technologies',
-                          e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
-                        )
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>主要亮点（每行一条）</Label>
-                    <Textarea
-                      value={proj.highlights.join('\n')}
-                      onChange={(e) =>
-                        updateProject(proj.id, 'highlights', e.target.value.split('\n').filter(Boolean))
-                      }
-                      rows={3}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-            <Button variant="outline" onClick={addProject}>
+            {resolvedResume && (
+              <PoolResolvedDisplay type="project" items={resolvedResume.projects} />
+            )}
+            <Button variant="outline" onClick={() => { loadPool(); setShowProjSelector(true); }}>
               <Plus className="h-4 w-4 mr-2" />
-              添加项目经历
+              从经验池选择项目经历
             </Button>
+            {resume && (
+              <PoolSelector
+                open={showProjSelector}
+                onOpenChange={setShowProjSelector}
+                type="project"
+                selectedIds={resume.projectIds}
+                onConfirm={async (ids) => {
+                  const updated = { ...resume, projectIds: ids };
+                  setResume(updated);
+                  const resolved = await resolveResumeDB(updated);
+                  setResolvedResume(resolved);
+                }}
+              />
+            )}
           </CardContent>
         )}
       </Card>
@@ -801,40 +832,36 @@ export default function ResumeEditPage() {
           </div>
         </CardHeader>
         {expandedSections.skills && (
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             {resume.skills.map((skill) => (
-              <div key={skill.id} className="flex gap-4 items-start">
-                <div className="flex-1 grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>技能类别</Label>
-                    <Input
-                      value={skill.category}
-                      onChange={(e) => updateSkill(skill.id, 'category', e.target.value)}
-                      placeholder="如：编程语言、框架、工具等"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>技能列表（逗号分隔）</Label>
-                    <Input
-                      value={skill.items.join(', ')}
-                      onChange={(e) =>
-                        updateSkill(
-                          skill.id,
-                          'items',
-                          e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
-                        )
-                      }
-                    />
-                  </div>
+              <div key={skill.id || skill.category} className="rounded-[1.2rem] bg-[#faf9f6] p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <Input
+                    value={skill.category}
+                    onChange={(e) => updateSkill(skill.id, 'category', e.target.value)}
+                    placeholder="技能类别，如：编程语言、框架"
+                    className="flex-1 bg-white font-medium rounded-[0.8rem]"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeSkill(skill.id)}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="mt-8"
-                  onClick={() => removeSkill(skill.id)}
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
+                <Input
+                  value={skill.items.join(', ')}
+                  onChange={(e) =>
+                    updateSkill(
+                      skill.id,
+                      'items',
+                      e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
+                    )
+                  }
+                  placeholder="技能列表，逗号分隔"
+                  className="bg-white rounded-[0.8rem] text-sm"
+                />
               </div>
             ))}
             <Button variant="outline" onClick={addSkill}>

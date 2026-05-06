@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FileText, Trash2, MessageSquare, ArrowRight } from 'lucide-react';
+import { Plus, FileText, Trash2, MessageSquare, ArrowRight, PenLine } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -18,8 +19,10 @@ import { useResumeStore } from '@/store';
 
 export default function ResumeListPage() {
   const router = useRouter();
-  const { resumes, loadResumes, deleteResume, isLoading } = useResumeStore();
+  const { resumes, loadResumes, deleteResume, saveResume, isLoading } = useResumeStore();
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [editingCardName, setEditingCardName] = useState('');
 
   useEffect(() => {
     loadResumes();
@@ -96,20 +99,53 @@ export default function ResumeListPage() {
               <CardContent className="space-y-5 p-5">
                 {/* Decorative Header */}
                 <div className={`flex min-h-[7rem] items-end rounded-[1.5rem] px-5 py-4 shadow-md ${index % 3 === 0 ? 'blob-lilac' : index % 3 === 1 ? 'blob-sand' : 'blob-mint'}`}>
-                  <div>
+                  <div className="w-full">
                     <p className="text-xs font-medium uppercase tracking-[0.22em] text-[#3d342f]/55">Resume</p>
-                    <h3 className="mt-1 text-xl font-semibold tracking-tight text-[#221915]">
-                      {resume.experience[0]?.title || resume.basicInfo.name || '未命名简历'}
-                    </h3>
+                    {editingCardId === resume.id ? (
+                      <Input
+                        value={editingCardName}
+                        onChange={(e) => setEditingCardName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            saveResume({ ...resume, name: editingCardName || resume.basicInfo.name || '未命名简历', updatedAt: new Date().toISOString() });
+                            setEditingCardId(null);
+                          }
+                          if (e.key === 'Escape') setEditingCardId(null);
+                        }}
+                        onBlur={() => {
+                          saveResume({ ...resume, name: editingCardName || resume.basicInfo.name || '未命名简历', updatedAt: new Date().toISOString() });
+                          setEditingCardId(null);
+                        }}
+                        className="mt-1 text-lg font-semibold bg-white/50 border-0 rounded-[0.8rem] h-auto py-1 px-2"
+                        autoFocus
+                      />
+                    ) : (
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <h3 className="text-xl font-semibold tracking-tight text-[#221915]">
+                          {resume.name || resume.basicInfo.name || '未命名简历'}
+                        </h3>
+                        <button
+                          className="opacity-50 hover:opacity-100 transition-opacity shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingCardId(resume.id);
+                            setEditingCardName(resume.name || resume.basicInfo.name || '');
+                          }}
+                          title="点击编辑标题"
+                        >
+                          <PenLine className="h-3.5 w-3.5 text-[#3d342f]/50 hover:text-[#3d342f]/80" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* Info */}
                 <div>
-                  <h2 className="text-xl font-semibold">{resume.basicInfo.name || '未命名简历'}</h2>
+                  <h2 className="text-lg font-semibold">{resume.name || resume.basicInfo.name || '未命名简历'}</h2>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    {resume.experience.length > 0
-                      ? `${resume.experience[0].title} @ ${resume.experience[0].company}`
+                    {resume.experienceIds.length > 0
+                      ? '有工作经历'
                       : '暂无工作经历'}
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">

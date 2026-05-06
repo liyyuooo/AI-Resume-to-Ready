@@ -23,8 +23,8 @@ import {
   DialogTitle,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Target, MessageSquare, Brain, Code, FileText, ArrowRight, History, Clock, Trash2 } from 'lucide-react';
-import { useResumeStore, useInterviewStore } from '@/store';
+import { Target, MessageSquare, Brain, Code, FileText, ArrowRight, History, Clock, Trash2, List, PenLine } from 'lucide-react';
+import { useResumeStore, useInterviewStore, useJDHistoryStore } from '@/store';
 import type { InterviewType } from '@/types';
 
 const interviewTypes = [
@@ -71,7 +71,8 @@ function InterviewContent() {
   const selectedResumeId = searchParams.get('resumeId');
 
   const { resumes, loadResumes } = useResumeStore();
-  const { sessions, loadSessions, deleteSession } = useInterviewStore();
+  const { sessions, loadSessions, deleteSession, saveSession } = useInterviewStore();
+  const { records: jdRecords, loadHistory } = useJDHistoryStore();
 
   const [selectedResume, setSelectedResume] = useState(selectedResumeId || '');
   const [interviewType, setInterviewType] = useState<InterviewType>('job-targeted');
@@ -79,11 +80,14 @@ function InterviewContent() {
   const [targetRole, setTargetRole] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editingSessionTitle, setEditingSessionTitle] = useState('');
 
   useEffect(() => {
     loadResumes();
     loadSessions();
-  }, [loadResumes, loadSessions]);
+    loadHistory();
+  }, [loadResumes, loadSessions, loadHistory]);
 
   const handleDelete = async () => {
     if (deleteId) {
@@ -144,7 +148,6 @@ function InterviewContent() {
                 {resumes.map((resume) => (
                   <SelectItem key={resume.id} value={resume.id}>
                     {resume.basicInfo.name || '未命名简历'}
-                    {resume.experience.length > 0 && ` - ${resume.experience[0].title}`}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -219,6 +222,40 @@ function InterviewContent() {
               </div>
             </div>
 
+            {/* 从目标岗位列表选择 */}
+            {jdRecords.length > 0 && (
+              <div className="mb-5 rounded-[1.4rem] border border-[#d8ccff]/50 bg-[#f8f4ff]/60 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <List className="h-4 w-4 text-[#3d342f]/50" />
+                  <span className="text-xs font-medium text-[#3d342f]/60">从目标岗位列表选择</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {jdRecords.map((record) => (
+                    <button
+                      key={record.id}
+                      className="rounded-full border border-[#d8ccff]/60 bg-white/80 px-3 py-1.5 text-xs text-[#3d342f] hover:bg-[#d8ccff]/30 hover:border-[#b8a8ee] transition"
+                      onClick={() => {
+                        if (record.targetCompany) setTargetCompany(record.targetCompany);
+                        if (record.targetRole) setTargetRole(record.targetRole);
+                        if (record.jobDescription) setJobDescription(record.jobDescription);
+                      }}
+                    >
+                      {record.targetRole || record.targetCompany || record.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {jdRecords.length === 0 && (
+              <div className="mb-5 rounded-[1.2rem] bg-[#f7efde] px-4 py-3 text-sm text-muted-foreground">
+                还没有目标岗位，
+                <Button variant="link" className="px-1 text-[#1a1513]" onClick={() => router.push('/target-jobs')}>
+                  去添加
+                </Button>
+              </div>
+            )}
+
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>目标公司</Label>
@@ -284,11 +321,44 @@ function InterviewContent() {
               <Card key={session.id} className="card-hover rounded-[1.6rem] border-border/70 bg-white/90">
                 <CardContent className="space-y-4 p-5">
                   <div className={`flex min-h-[5rem] items-end rounded-[1.2rem] px-4 py-3 shadow-md ${index % 3 === 0 ? 'blob-mint' : index % 3 === 1 ? 'blob-lilac' : 'blob-sand'}`}>
-                    <div>
+                    <div className="w-full">
                       <p className="text-xs font-medium uppercase tracking-[0.2em] text-[#3d342f]/55">Interview</p>
-                      <h3 className="mt-1 text-base font-semibold tracking-tight text-[#221915]">
-                        {session.targetRole || interviewTypeLabels[session.type] || session.type}
-                      </h3>
+                      {editingSessionId === session.id ? (
+                        <Input
+                          value={editingSessionTitle}
+                          onChange={(e) => setEditingSessionTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              saveSession({ ...session, targetRole: editingSessionTitle, updatedAt: new Date().toISOString() });
+                              setEditingSessionId(null);
+                            }
+                            if (e.key === 'Escape') setEditingSessionId(null);
+                          }}
+                          onBlur={() => {
+                            saveSession({ ...session, targetRole: editingSessionTitle || undefined, updatedAt: new Date().toISOString() });
+                            setEditingSessionId(null);
+                          }}
+                          className="mt-1 text-sm font-semibold bg-white/50 border-0 rounded-[0.8rem] h-auto py-1 px-2"
+                          autoFocus
+                        />
+                      ) : (
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <h3 className="text-base font-semibold tracking-tight text-[#221915]">
+                            {session.targetRole || interviewTypeLabels[session.type] || session.type}
+                          </h3>
+                          <button
+                            className="opacity-50 hover:opacity-100 transition-opacity shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingSessionId(session.id);
+                              setEditingSessionTitle(session.targetRole || interviewTypeLabels[session.type] || session.type);
+                            }}
+                            title="点击编辑标题"
+                          >
+                            <PenLine className="h-3.5 w-3.5 text-[#3d342f]/50 hover:text-[#3d342f]/80" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div>

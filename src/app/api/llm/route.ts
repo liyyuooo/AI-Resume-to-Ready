@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
-  content: string;
+  content: string | Array<{ type: string; text?: string; image_url?: { url: string; detail?: string } }>;
 }
 
 interface RequestBody {
@@ -17,6 +17,42 @@ interface RequestBody {
 function isAnthropicApi(url: string): boolean {
   const lower = url.toLowerCase();
   return lower.includes('anthropic.com') || lower.includes('/anthropic/');
+}
+
+function convertToAnthropicContent(
+  content: string | Array<{ type: string; text?: string; image_url?: { url: string; detail?: string } }>
+): string | Array<Record<string, unknown>> {
+  if (typeof content === 'string') return content;
+
+  return content.map((part) => {
+    if (part.type === 'text') {
+      return { type: 'text', text: part.text || '' };
+    }
+    if (part.type === 'image_url' && part.image_url) {
+      const url = part.image_url.url;
+      // data:image/png;base64,xxxxx
+      const match = url.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        return {
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: match[1],
+            data: match[2],
+          },
+        };
+      }
+      // External URL - pass as image_url (some Anthropic proxies support this)
+      return {
+        type: 'image',
+        source: {
+          type: 'url',
+          url: url,
+        },
+      };
+    }
+    return { type: 'text', text: '' };
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -62,7 +98,7 @@ async function handleAnthropicRequest(
   console.error('[LLM Proxy] Calling Anthropic API...');
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120000); // 2 minutes timeout
+  const timeout = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout
 
   try {
     const response = await fetch(apiUrl, {
@@ -78,7 +114,7 @@ async function handleAnthropicRequest(
         system: systemPrompt || undefined,
         messages: messages.map((m) => ({
           role: m.role,
-          content: m.content,
+          content: convertToAnthropicContent(m.content),
         })),
         stream: stream || false,
       }),
@@ -123,7 +159,7 @@ async function handleOpenAIRequest(
   formattedMessages.push(...messages);
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120000); // 2 minutes timeout
+  const timeout = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout
 
   try {
     const response = await fetch(apiUrl, {

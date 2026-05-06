@@ -1,4 +1,4 @@
-import type { ChatCompletionMessage } from '@/types';
+import type { ChatCompletionMessage, ContentPart } from '@/types';
 
 export interface LLMProvider {
   chat(
@@ -23,6 +23,7 @@ export interface LLMConfig {
 export const PRESET_URLS: Record<string, string> = {
   openai: 'https://api.openai.com/v1/chat/completions',
   claude: 'https://api.anthropic.com/v1/messages',
+  bailian: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
   qianfanOpenAI: 'https://qianfan.baidubce.com/v2/coding/chat/completions',
   qianfanAnthropic: 'https://qianfan.baidubce.com/anthropic/coding/v1/messages',
   zhipu: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',

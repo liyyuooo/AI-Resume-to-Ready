@@ -2,12 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FileText, MessageSquare, Settings, Home } from 'lucide-react';
+import { FileText, MessageSquare, Settings, Home, Layers, Target } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/', label: '首页', icon: Home },
   { href: '/resume', label: '简历', icon: FileText },
+  { href: '/experience-pool', label: '经验池', icon: Layers },
+  { href: '/target-jobs', label: '目标岗位', icon: Target },
   { href: '/interview', label: '面试', icon: MessageSquare },
   { href: '/settings', label: '设置', icon: Settings },
 ];

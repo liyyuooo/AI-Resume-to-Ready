@@ -13,9 +13,15 @@ import { useSettingsStore, useResumeStore } from '@/store';
 import { createLLM } from '@/lib/llm';
 import { RESUME_PARSE_PROMPT, RESUME_GUIDE_SYSTEM_PROMPT } from '@/lib/prompts';
 import { parseResumeFile, isSupportedFileType } from '@/lib/resume-parser';
+import { saveExperiencePoolItem } from '@/lib/db';
 import { useSpeechRecognition } from '@/lib/hooks/use-speech-recognition';
 import { v4 as uuidv4 } from 'uuid';
-import type { Resume, ChatCompletionMessage } from '@/types';
+import type { Resume, ExperiencePoolItem, ChatCompletionMessage, ContentPart } from '@/types';
+
+const getContentText = (content: string | ContentPart[]): string => {
+  if (typeof content === 'string') return content;
+  return content.filter((p) => p.type === 'text').map((p) => p.text).join('');
+};
 
 function NewResumeContent() {
   const router = useRouter();
@@ -118,7 +124,11 @@ function NewResumeContent() {
   };
 
   const handleImport = async () => {
-    if (!resumeText.trim() || !settings?.apiKey) return;
+    if (!resumeText.trim()) return;
+    if (!settings?.apiKey) {
+      setParseError('请先前往设置页面配置 API Key，否则无法解析简历内容。');
+      return;
+    }
 
     setIsParsing(true);
     setParseError(null);
@@ -140,12 +150,57 @@ function NewResumeContent() {
       }
 
       const parsedData = JSON.parse(jsonMatch[0]);
+      const now = new Date().toISOString();
+
+      // 将经历保存到经历池
+      const experienceIds: string[] = [];
+      const projectIds: string[] = [];
+
+      if (Array.isArray(parsedData.experience)) {
+        for (const e of parsedData.experience) {
+          const poolItem: ExperiencePoolItem = {
+            id: uuidv4(),
+            type: 'experience',
+            company: e.company || '',
+            title: e.title || '',
+            startDate: e.startDate || '',
+            endDate: e.endDate || '',
+            location: e.location || '',
+            responsibilities: e.responsibilities || [],
+            achievements: e.achievements || [],
+            source: 'upload',
+            createdAt: now,
+            updatedAt: now,
+          };
+          await saveExperiencePoolItem(poolItem);
+          experienceIds.push(poolItem.id);
+        }
+      }
+
+      if (Array.isArray(parsedData.projects)) {
+        for (const p of parsedData.projects) {
+          const poolItem: ExperiencePoolItem = {
+            id: uuidv4(),
+            type: 'project',
+            name: p.name || '',
+            role: p.role || '',
+            description: p.description || '',
+            technologies: p.technologies || [],
+            highlights: p.highlights || [],
+            source: 'upload',
+            createdAt: now,
+            updatedAt: now,
+          };
+          await saveExperiencePoolItem(poolItem);
+          projectIds.push(poolItem.id);
+        }
+      }
 
       const resume: Resume = {
         id: uuidv4(),
         name: `${parsedData.basicInfo?.name || '未命名'}的简历`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: now,
+        updatedAt: now,
         basicInfo: parsedData.basicInfo || {
           name: '',
           email: '',
@@ -162,24 +217,8 @@ function NewResumeContent() {
           endDate: e.endDate || '',
           highlights: e.highlights || [],
         })) || [],
-        experience: parsedData.experience?.map((e: Partial<Resume['experience'][0]>) => ({
-          id: uuidv4(),
-          company: e.company || '',
-          title: e.title || '',
-          startDate: e.startDate || '',
-          endDate: e.endDate || '',
-          location: e.location || '',
-          responsibilities: e.responsibilities || [],
-          achievements: e.achievements || [],
-        })) || [],
-        projects: parsedData.projects?.map((p: Partial<Resume['projects'][0]>) => ({
-          id: uuidv4(),
-          name: p.name || '',
-          role: p.role || '',
-          description: p.description || '',
-          technologies: p.technologies || [],
-          highlights: p.highlights || [],
-        })) || [],
+        experienceIds,
+        projectIds,
         skills: parsedData.skills?.map((s: Partial<Resume['skills'][0]>) => ({
           id: uuidv4(),
           category: s.category || '',
@@ -266,12 +305,57 @@ function NewResumeContent() {
       }
 
       const parsedData = JSON.parse(jsonMatch[0]);
+      const now = new Date().toISOString();
+
+      // 将经历保存到经历池
+      const experienceIds: string[] = [];
+      const projectIds: string[] = [];
+
+      if (Array.isArray(parsedData.experience)) {
+        for (const e of parsedData.experience) {
+          const poolItem: ExperiencePoolItem = {
+            id: uuidv4(),
+            type: 'experience',
+            company: e.company || '',
+            title: e.title || '',
+            startDate: e.startDate || '',
+            endDate: e.endDate || '',
+            location: e.location || '',
+            responsibilities: e.responsibilities || [],
+            achievements: e.achievements || [],
+            source: 'upload',
+            createdAt: now,
+            updatedAt: now,
+          };
+          await saveExperiencePoolItem(poolItem);
+          experienceIds.push(poolItem.id);
+        }
+      }
+
+      if (Array.isArray(parsedData.projects)) {
+        for (const p of parsedData.projects) {
+          const poolItem: ExperiencePoolItem = {
+            id: uuidv4(),
+            type: 'project',
+            name: p.name || '',
+            role: p.role || '',
+            description: p.description || '',
+            technologies: p.technologies || [],
+            highlights: p.highlights || [],
+            source: 'upload',
+            createdAt: now,
+            updatedAt: now,
+          };
+          await saveExperiencePoolItem(poolItem);
+          projectIds.push(poolItem.id);
+        }
+      }
 
       const resume: Resume = {
         id: uuidv4(),
         name: `${parsedData.basicInfo?.name || '未命名'}的简历`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: now,
+        updatedAt: now,
         basicInfo: parsedData.basicInfo || {
           name: '',
           email: '',
@@ -288,24 +372,8 @@ function NewResumeContent() {
           endDate: e.endDate || '',
           highlights: e.highlights || [],
         })) || [],
-        experience: parsedData.experience?.map((e: Partial<Resume['experience'][0]>) => ({
-          id: uuidv4(),
-          company: e.company || '',
-          title: e.title || '',
-          startDate: e.startDate || '',
-          endDate: e.endDate || '',
-          location: e.location || '',
-          responsibilities: e.responsibilities || [],
-          achievements: e.achievements || [],
-        })) || [],
-        projects: parsedData.projects?.map((p: Partial<Resume['projects'][0]>) => ({
-          id: uuidv4(),
-          name: p.name || '',
-          role: p.role || '',
-          description: p.description || '',
-          technologies: p.technologies || [],
-          highlights: p.highlights || [],
-        })) || [],
+        experienceIds,
+        projectIds,
         skills: parsedData.skills?.map((s: Partial<Resume['skills'][0]>) => ({
           id: uuidv4(),
           category: s.category || '',
@@ -427,6 +495,18 @@ function NewResumeContent() {
                     返回
                   </Button>
                 </div>
+                {!settings?.apiKey && (
+                  <p className="text-xs text-amber-600 mt-2">
+                    提示：点击解析前请先
+                    <button
+                      className="underline font-medium mx-1"
+                      onClick={() => router.push('/settings')}
+                    >
+                      配置 API Key
+                    </button>
+                    ，否则解析按钮没有反应。
+                  </p>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -459,7 +539,7 @@ function NewResumeContent() {
                       {messages.map((msg, idx) => (
                         <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                           <div className={`max-w-[85%] rounded-[1.3rem] px-4 py-3 text-sm leading-7 ${msg.role === 'user' ? 'bg-[#171412] text-[#f7eed8]' : 'bg-white text-[#231915] shadow-sm'}`}>
-                            {msg.content}
+                            {getContentText(msg.content)}
                           </div>
                         </div>
                       ))}
