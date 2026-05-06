@@ -59,16 +59,26 @@ export default function HomePage() {
   const { loadResumes, resumes, saveResume } = useResumeStore();
   const { loadSessions, sessions, saveSession } = useInterviewStore();
 
+  const [mounted, setMounted] = useState(false);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editingCardName, setEditingCardName] = useState('');
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editingSessionTitle, setEditingSessionTitle] = useState('');
 
   useEffect(() => {
+    setMounted(true);
     loadSettings();
     loadResumes();
     loadSessions();
   }, [loadSettings, loadResumes, loadSessions]);
+
+  if (!mounted) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
+        加载中...
+      </div>
+    );
+  }
 
   const recentResumes = resumes.slice(0, 3);
   const recentSessions = sessions.slice(0, 3);
