@@ -43,18 +43,36 @@ const DEFAULT_MODELS: Record<string, string> = {
 export default function SettingsPage() {
   const router = useRouter();
   const { settings, loadSettings, updateSettings } = useSettingsStore();
+  const [mounted, setMounted] = useState(false);
   const [preset, setPreset] = useState('custom');
-  const [apiUrl, setApiUrl] = useState(settings?.apiUrl || '');
-  const [apiKey, setApiKey] = useState(settings?.apiKey || '');
-  const [model, setModel] = useState(settings?.model || '');
+  const [apiUrl, setApiUrl] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [model, setModel] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
   const [testErrorMsg, setTestErrorMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     loadSettings();
   }, [loadSettings]);
+
+  useEffect(() => {
+    if (mounted && settings) {
+      setApiUrl(settings.apiUrl || '');
+      setApiKey(settings.apiKey || '');
+      setModel(settings.model || '');
+    }
+  }, [mounted, settings]);
+
+  if (!mounted) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
+        加载中...
+      </div>
+    );
+  }
 
   const currentApiUrl = settings?.apiUrl || '';
   const matchedPreset = Object.entries(PRESET_URLS).find(([, url]) => url === currentApiUrl);

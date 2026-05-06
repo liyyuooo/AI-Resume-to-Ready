@@ -20,11 +20,13 @@ import { useResumeStore } from '@/store';
 export default function ResumeListPage() {
   const router = useRouter();
   const { resumes, loadResumes, deleteResume, saveResume, isLoading } = useResumeStore();
+  const [mounted, setMounted] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [editingCardName, setEditingCardName] = useState('');
 
   useEffect(() => {
+    setMounted(true);
     loadResumes();
   }, [loadResumes]);
 
@@ -35,7 +37,7 @@ export default function ResumeListPage() {
     }
   };
 
-  if (isLoading) {
+  if (!mounted || isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
         加载中...

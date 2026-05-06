@@ -24,6 +24,7 @@ export default function TargetJobsPage() {
   const { resumes, loadResumes, saveResume } = useResumeStore();
   const { settings } = useSettingsStore();
 
+  const [mounted, setMounted] = useState(false);
   const [isCreating, setIsCreating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -34,10 +35,19 @@ export default function TargetJobsPage() {
   const [uploadedImageName, setUploadedImageName] = useState('');
 
   useEffect(() => {
+    setMounted(true);
     loadHistory();
     loadPool();
     loadResumes();
   }, [loadHistory, loadPool, loadResumes]);
+
+  if (!mounted) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
+        加载中...
+      </div>
+    );
+  }
 
   const handleCreateResume = async (record: JDHistoryRecord) => {
     if (!settings?.apiKey || poolItems.length === 0) return;

@@ -74,6 +74,7 @@ function InterviewContent() {
   const { sessions, loadSessions, deleteSession, saveSession } = useInterviewStore();
   const { records: jdRecords, loadHistory } = useJDHistoryStore();
 
+  const [mounted, setMounted] = useState(false);
   const [selectedResume, setSelectedResume] = useState(selectedResumeId || '');
   const [interviewType, setInterviewType] = useState<InterviewType>('job-targeted');
   const [targetCompany, setTargetCompany] = useState('');
@@ -84,6 +85,7 @@ function InterviewContent() {
   const [editingSessionTitle, setEditingSessionTitle] = useState('');
 
   useEffect(() => {
+    setMounted(true);
     loadResumes();
     loadSessions();
     loadHistory();
@@ -95,6 +97,14 @@ function InterviewContent() {
       setDeleteId(null);
     }
   };
+
+  if (!mounted) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
+        加载中...
+      </div>
+    );
+  }
 
   const handleStart = () => {
     const params = new URLSearchParams({
