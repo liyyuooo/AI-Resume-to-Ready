@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useSyncExternalStore, Suspense } from 'react';
+import { useState, useRef, useCallback, useSyncExternalStore, Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,7 +46,9 @@ function InterviewSessionContent() {
   const interviewType = (searchParams.get('type') || 'job-targeted') as InterviewType;
   const targetCompany = searchParams.get('company') || '';
   const targetRole = searchParams.get('role') || '';
-  const jobDescription = searchParams.get('jd') ? decodeURIComponent(searchParams.get('jd')!) : '';
+
+  // JD 从 sessionStorage 读取，避免 URL 过长
+  const [jobDescription, setJobDescription] = useState('');
 
   const { getResume } = useResumeStore();
   const { settings } = useSettingsStore();
@@ -85,6 +87,22 @@ function InterviewSessionContent() {
     () => false,
   );
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  // 读取后清除 sessionStorage 中的 JD，避免下次进入读到旧数据
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const jd = sessionStorage.getItem('interview-jd') || '';
+      setJobDescription(jd);
+      sessionStorage.removeItem('interview-jd');
+    }
+  }, []);
+
+  // 当 jobDescription 更新后，同步到 session
+  useEffect(() => {
+    if (jobDescription && session) {
+      setSession((prev) => prev ? { ...prev, jobDescription } : prev);
+    }
+  }, [jobDescription]);
 
   // 语音识别
   const {

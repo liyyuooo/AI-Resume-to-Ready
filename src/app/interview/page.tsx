@@ -114,7 +114,13 @@ function InterviewContent() {
 
     if (targetCompany) params.set('company', targetCompany);
     if (targetRole) params.set('role', targetRole);
-    if (jobDescription) params.set('jd', encodeURIComponent(jobDescription));
+
+    // JD 通过 sessionStorage 传递，避免 URL 过长导致 431 错误
+    if (jobDescription) {
+      sessionStorage.setItem('interview-jd', jobDescription);
+    } else {
+      sessionStorage.removeItem('interview-jd');
+    }
 
     router.push(`/interview/session?${params.toString()}`);
   };
