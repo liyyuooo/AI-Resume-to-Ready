@@ -83,12 +83,12 @@ function InterviewSessionContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const autoResize = () => {
+  useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 200) + 'px';
-  };
+  }, [voiceDisplayValue]);
 
   // 避免 SSR 水合问题
   const mounted = useSyncExternalStore(
@@ -374,10 +374,7 @@ function InterviewSessionContent() {
             ref={textareaRef}
             placeholder={mounted && isListening ? '正在聆听...' : '输入你的回答... (Enter 发送，Shift+Enter 换行)'}
             value={voiceDisplayValue}
-            onChange={(e) => {
-              setInputMessage(e.target.value);
-              autoResize();
-            }}
+            onChange={(e) => setInputMessage(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
