@@ -27,7 +27,7 @@ function NewResumeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const mode = searchParams.get('mode') || 'import';
-  const { settings, loadSettings } = useSettingsStore();
+  const { settings, isLoading: settingsLoading, loadSettings } = useSettingsStore();
   const { saveResume } = useResumeStore();
 
   const [resumeText, setResumeText] = useState('');
@@ -506,7 +506,7 @@ function NewResumeContent() {
                     返回
                   </Button>
                 </div>
-                {!settings?.apiKey && (
+                {!settingsLoading && !settings?.apiKey && (
                   <p className="text-xs text-amber-600 mt-2">
                     提示：点击解析前请先
                     <button

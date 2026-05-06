@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Settings, Check, AlertCircle, ArrowRight } from 'lucide-react';
+import { Settings, Check, AlertCircle, ArrowRight, Loader2 } from 'lucide-react';
 import { useSettingsStore } from '@/store';
 import { createLLM, PRESET_URLS } from '@/lib/llm';
 
@@ -42,7 +42,7 @@ const DEFAULT_MODELS: Record<string, string> = {
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { settings, loadSettings, updateSettings } = useSettingsStore();
+  const { settings, isLoading, loadSettings, updateSettings } = useSettingsStore();
   const [mounted, setMounted] = useState(false);
   const [preset, setPreset] = useState('custom');
   const [apiUrl, setApiUrl] = useState('');
@@ -52,6 +52,7 @@ export default function SettingsPage() {
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
   const [testErrorMsg, setTestErrorMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -66,7 +67,8 @@ export default function SettingsPage() {
     }
   }, [mounted, settings]);
 
-  if (!mounted) {
+  // 设置加载中时显示加载状态
+  if (!mounted || (isLoading && !settings)) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
         加载中...
@@ -102,17 +104,22 @@ export default function SettingsPage() {
 
   const handleSave = async () => {
     if (!apiUrl.trim() || !apiKey.trim() || !model.trim()) {
+      setSaveError('请填写完整的 API 配置信息');
       return;
     }
 
     setIsSaving(true);
+    setSaveError(null);
     try {
       await updateSettings({
-        apiUrl,
-        apiKey,
-        model,
+        apiUrl: apiUrl.trim(),
+        apiKey: apiKey.trim(),
+        model: model.trim(),
       });
       router.push('/');
+    } catch (err) {
+      console.error('Save settings error:', err);
+      setSaveError(err instanceof Error ? err.message : '保存失败，请重试');
     } finally {
       setIsSaving(false);
     }
@@ -265,6 +272,12 @@ export default function SettingsPage() {
                   {testResult === 'error' && testErrorMsg && (
                     <p className="mt-1.5 break-all text-xs opacity-75">{testErrorMsg}</p>
                   )}
+                </div>
+              )}
+
+              {saveError && (
+                <div className="rounded-[1.2rem] bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {saveError}
                 </div>
               )}
 
