@@ -7,8 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Target, Loader2, ArrowRight, Trash2, Sparkles, History, Plus, Building2, ImageIcon } from 'lucide-react';
+import { Loader2, Trash2, Sparkles, Plus, ImageIcon } from 'lucide-react';
 import { useJDHistoryStore, useExperiencePoolStore, useResumeStore, useSettingsStore } from '@/store';
 import { createLLM } from '@/lib/llm';
 import { getTailoredResumePrompt } from '@/lib/prompts';
@@ -19,7 +18,7 @@ import type { JDHistoryRecord, ExperiencePoolItem, Resume } from '@/types';
 
 export default function TargetJobsPage() {
   const router = useRouter();
-  const { records, isLoading, loadHistory, addRecord, removeRecord } = useJDHistoryStore();
+  const { records, loadHistory, addRecord, removeRecord } = useJDHistoryStore();
   const { items: poolItems, loadItems: loadPool } = useExperiencePoolStore();
   const { resumes, loadResumes, saveResume } = useResumeStore();
   const { settings } = useSettingsStore();
@@ -368,11 +367,7 @@ export default function TargetJobsPage() {
 
       {/* JD History List */}
       <section className="mt-8">
-        {isLoading ? (
-          <div className="flex min-h-[30vh] items-center justify-center text-muted-foreground">
-            加载中...
-          </div>
-        ) : records.length === 0 ? (
+        {records.length === 0 ? (
           <div className="paper-card px-6 py-12 text-center">
             <div className="mx-auto blob-mint h-24 w-24 rounded-[40%_60%_55%_45%/45%_45%_55%_55%] shadow-lg" />
             <h2 className="mt-8 text-2xl font-semibold">暂无目标岗位</h2>
@@ -394,15 +389,6 @@ export default function TargetJobsPage() {
                     </div>
                   </div>
                   <div>
-                    {record.targetCompany && (
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground mb-1">
-                        <Building2 className="h-3 w-3" />
-                        {record.targetCompany}
-                      </div>
-                    )}
-                    {record.targetRole && (
-                      <Badge variant="secondary" className="text-xs">{record.targetRole}</Badge>
-                    )}
                     <p className="mt-2 text-xs text-muted-foreground line-clamp-3">
                       {record.jobDescription}
                     </p>

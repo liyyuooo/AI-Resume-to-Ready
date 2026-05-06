@@ -59,7 +59,7 @@ export default function ResumeEditPage() {
   const router = useRouter();
   const resumeId = params.id as string;
 
-  const { getResume, saveResume, isLoading } = useResumeStore();
+  const { getResume, saveResume } = useResumeStore();
   const { settings } = useSettingsStore();
   const [mounted, setMounted] = useState(false);
   const [resume, setResume] = useState<Resume | null>(null);
@@ -296,7 +296,7 @@ export default function ResumeEditPage() {
     }
   };
 
-  if (!mounted || isLoading || !resume) {
+  if (!mounted || !resume) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-muted-foreground">加载中...</div>

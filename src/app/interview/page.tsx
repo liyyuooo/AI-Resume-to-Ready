@@ -372,11 +372,7 @@ function InterviewContent() {
                     </div>
                   </div>
                   <div>
-                    <h3 className="font-semibold">{interviewTypeLabels[session.type] || session.type}</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {session.targetRole || session.targetCompany || '未指定岗位'}
-                    </p>
-                    <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Clock className="h-3 w-3" />
                       {new Date(session.updatedAt).toLocaleDateString('zh-CN', {
                         month: 'short',

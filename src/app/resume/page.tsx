@@ -19,7 +19,7 @@ import { useResumeStore } from '@/store';
 
 export default function ResumeListPage() {
   const router = useRouter();
-  const { resumes, loadResumes, deleteResume, saveResume, isLoading } = useResumeStore();
+  const { resumes, loadResumes, deleteResume, saveResume } = useResumeStore();
   const [mounted, setMounted] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
@@ -37,7 +37,7 @@ export default function ResumeListPage() {
     }
   };
 
-  if (!mounted || isLoading) {
+  if (!mounted) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
         加载中...
@@ -144,8 +144,7 @@ export default function ResumeListPage() {
 
                 {/* Info */}
                 <div>
-                  <h2 className="text-lg font-semibold">{resume.name || resume.basicInfo.name || '未命名简历'}</h2>
-                  <p className="mt-2 text-sm text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     {resume.experienceIds.length > 0
                       ? '有工作经历'
                       : '暂无工作经历'}
