@@ -32,7 +32,7 @@ const DB_NAME = 'resume-ai-assistant';
 const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBPDatabase<ResumeAIDB>> | null = null;
-let rawDB: IDBDatabase | null = null;
+let dbFailed = false;
 
 // 在 IDBDatabase 上创建/升级所有 object stores
 function createStores(db: IDBDatabase, oldVersion: number) {
@@ -188,91 +188,89 @@ export async function getDB() {
   if (typeof indexedDB === 'undefined') {
     throw new Error('IndexedDB is not available (server-side rendering)');
   }
-  if (dbPromise) return dbPromise;
+  // 已 resolve 的 promise 直接复用；已 reject 的通过 dbFailed 标记跳过
+  if (dbPromise && !dbFailed) return dbPromise;
 
+  dbFailed = false;
   dbPromise = (async () => {
-    // === Tier 1: 尝试用目标版本打开（可能被旧 tab 的旧版本连接阻塞） ===
+    // === Tier 1: 无版本打开（不触发 upgrade，永不 block，应该瞬间完成） ===
+    let db: IDBDatabase;
     try {
-      const db = await nativeOpen(DB_NAME, DB_VERSION, createStores, 2000);
-      rawDB = db;
-
-      // 设置 onversionchange：当未来新版本尝试升级时，主动关闭当前连接
-      db.onversionchange = () => {
-        db.close();
-        rawDB = null;
-        dbPromise = null;
-      };
-
-      return wrap(db) as unknown as IDBPDatabase<ResumeAIDB>;
+      db = await nativeOpen(DB_NAME, undefined, undefined, 1000);
     } catch (err) {
-      console.warn('IndexedDB open with version upgrade failed:', err);
+      console.warn('IndexedDB versionless open failed:', err);
+      throw err;
     }
 
-    // === Tier 2: 回退到无版本打开（不触发 upgrade，永远不会 block） ===
-    try {
-      const db = await nativeOpen(DB_NAME, undefined, undefined, 5000);
-      rawDB = db;
+    db.onversionchange = () => {
+      db.close();
+      dbPromise = null;
+    };
 
-      db.onversionchange = () => {
-        db.close();
-        rawDB = null;
+    const currentVersion = db.version;
+    const needsUpgrade = currentVersion < DB_VERSION;
+    const hasExperiences = db.objectStoreNames.contains('experiences');
+
+    // 如果版本够了且 schema 完整，直接使用
+    if (!needsUpgrade && hasExperiences) {
+      return wrap(db) as unknown as IDBPDatabase<ResumeAIDB>;
+    }
+
+    // === Tier 2: 需要升级，关闭后尝试版本升级 ===
+    db.close();
+    console.log(`DB at v${currentVersion}, upgrading to v${DB_VERSION}`);
+
+    try {
+      const upgraded = await nativeOpen(DB_NAME, DB_VERSION, (idb, oldVersion) => {
+        createStores(idb, oldVersion);
+      }, 1500);
+
+      upgraded.onversionchange = () => {
+        upgraded.close();
         dbPromise = null;
       };
 
-      const wrapped = wrap(db) as unknown as IDBPDatabase<ResumeAIDB>;
-
-      // 检查是否需要迁移旧格式数据（v2→v3）
-      if (!db.objectStoreNames.contains('experiences')) {
-        console.log('DB needs migration — running v2→v3 migration in app code');
-        // 关闭当前连接，重新用目标版本打开以触发 upgrade
-        db.close();
-        rawDB = null;
-
-        const migratedDB = await nativeOpen(DB_NAME, DB_VERSION, (idb, oldVersion) => {
-          createStores(idb, oldVersion);
-        }, 5000);
-
-        // 检查是否有旧简历数据需要迁移
-        const hasResumes = migratedDB.objectStoreNames.contains('resumes');
-        let needsMigration = false;
-        if (hasResumes) {
-          try {
-            const checkTx = migratedDB.transaction('resumes', 'readonly');
-            const resumes = await new Promise<unknown[]>((resolve, reject) => {
-              const req = checkTx.objectStore('resumes').getAll();
-              req.onsuccess = () => resolve(req.result);
-              req.onerror = () => reject(req.error);
-            });
-            needsMigration = resumes.some((r) => {
-              const raw = r as unknown as Record<string, unknown>;
-              return (raw.experience && Array.isArray(raw.experience) && raw.experience.length > 0)
-                || (raw.projects && Array.isArray(raw.projects) && raw.projects.length > 0);
-            });
-          } catch {
-            // 检查失败，跳过迁移
+      // 检查是否有旧简历数据需要迁移（v2 → v3）
+      if (!hasExperiences && upgraded.objectStoreNames.contains('resumes')) {
+        try {
+          const checkTx = upgraded.transaction('resumes', 'readonly');
+          const resumes = await new Promise<unknown[]>((resolve, reject) => {
+            const req = checkTx.objectStore('resumes').getAll();
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+          });
+          const needsDataMigration = resumes.some((r) => {
+            const raw = r as unknown as Record<string, unknown>;
+            return (raw.experience && Array.isArray(raw.experience) && raw.experience.length > 0)
+              || (raw.projects && Array.isArray(raw.projects) && raw.projects.length > 0);
+          });
+          if (needsDataMigration) {
+            await migrateToExperiencePool(upgraded);
           }
+        } catch {
+          // 检查失败，跳过迁移
         }
-
-        if (needsMigration) {
-          await migrateToExperiencePool(migratedDB);
-        }
-
-        migratedDB.onversionchange = () => {
-          migratedDB.close();
-          rawDB = null;
-          dbPromise = null;
-        };
-        rawDB = migratedDB;
-        return wrap(migratedDB) as unknown as IDBPDatabase<ResumeAIDB>;
       }
 
-      return wrapped;
-    } catch (err2) {
-      console.error('IndexedDB fallback open also failed:', err2);
-      dbPromise = null;
-      throw err2;
+      return wrap(upgraded) as unknown as IDBPDatabase<ResumeAIDB>;
+    } catch (err) {
+      console.error('IndexedDB upgrade failed:', err);
+      // 升级失败（blocked / timeout），回退到旧版本 DB 使用
+      // 此时 experiences 表可能缺失，相关操作会失败
+      const fallback = await nativeOpen(DB_NAME, undefined, undefined, 2000);
+      fallback.onversionchange = () => {
+        fallback.close();
+        dbPromise = null;
+      };
+      console.warn('Using fallback DB at version', fallback.version, '— experiences store may be unavailable');
+      return wrap(fallback) as unknown as IDBPDatabase<ResumeAIDB>;
     }
   })();
+
+  // 失败时重置，允许下次调用重试
+  dbPromise.catch(() => {
+    dbFailed = true;
+  });
 
   return dbPromise;
 }
