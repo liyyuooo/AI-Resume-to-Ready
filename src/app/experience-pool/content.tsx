@@ -12,14 +12,27 @@ import type { ExperiencePoolItem } from '@/types';
 
 export default function ExperiencePoolContent() {
   const { items, isLoading, loadItems, addItem, updateItem, deleteItem } = useExperiencePoolStore();
+  const [mounted, setMounted] = useState(false);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('experience');
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ExperiencePoolItem | null>(null);
 
   useEffect(() => {
+    setMounted(true);
     loadItems();
   }, [loadItems]);
+
+  if (!mounted || isLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="text-center text-muted-foreground">
+          <Layers className="mx-auto h-10 w-10 mb-3 animate-pulse" />
+          <p>加载中...</p>
+        </div>
+      </div>
+    );
+  }
 
   const filtered = useMemo(() => {
     let list = items.filter((i) => i.type === activeTab);
