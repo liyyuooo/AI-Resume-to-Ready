@@ -108,7 +108,7 @@ export async function getDB() {
     throw new Error('IndexedDB is not available (server-side rendering)');
   }
   if (!dbPromise) {
-    dbPromise = openDB<ResumeAIDB>(DB_NAME, DB_VERSION, {
+    const openPromise = openDB<ResumeAIDB>(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion, _newVersion, transaction) {
         // 简历存储
         if (!db.objectStoreNames.contains('resumes')) {
@@ -146,6 +146,23 @@ export async function getDB() {
           });
         }
       },
+      blocked() {
+        // 数据库被旧版本连接阻塞
+        dbPromise = null;
+      },
+      terminated() {
+        dbPromise = null;
+      },
+    });
+
+    // 超时保护：IndexedDB blocked 时 openDB 不会 resolve/reject，防止永久挂起
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('IndexedDB open timeout after 10s')), 10000)
+    );
+    dbPromise = Promise.race([openPromise, timeout]).catch((err) => {
+      console.error('Failed to open IndexedDB:', err);
+      dbPromise = null;
+      throw err;
     });
   }
   return dbPromise;
