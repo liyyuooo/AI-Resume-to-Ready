@@ -23,17 +23,6 @@ export default function ExperiencePoolContent() {
     loadItems();
   }, [loadItems]);
 
-  if (!mounted || isLoading) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center text-muted-foreground">
-          <Layers className="mx-auto h-10 w-10 mb-3 animate-pulse" />
-          <p>加载中...</p>
-        </div>
-      </div>
-    );
-  }
-
   const filtered = useMemo(() => {
     let list = items.filter((i) => i.type === activeTab);
     if (search.trim()) {
@@ -46,6 +35,17 @@ export default function ExperiencePoolContent() {
     }
     return list;
   }, [items, activeTab, search]);
+
+  if (!mounted || isLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="text-center text-muted-foreground">
+          <Layers className="mx-auto h-10 w-10 mb-3 animate-pulse" />
+          <p>加载中...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleEdit = (item: ExperiencePoolItem) => {
     setEditingItem(item);
