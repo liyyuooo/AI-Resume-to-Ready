@@ -7,51 +7,32 @@ import * as db from '@/lib/db';
 interface SettingsState {
   settings: UserSettings | null;
   isLoading: boolean;
-  hasHydrated: boolean;
   loadSettings: () => Promise<void>;
   updateSettings: (settings: Partial<UserSettings>) => Promise<void>;
-  setHasHydrated: (value: boolean) => void;
 }
 
-export const useSettingsStore = create<SettingsState>()(
-  persist(
-    (set, get) => ({
-      settings: null,
-      isLoading: true,
-      hasHydrated: false,
+export const useSettingsStore = create<SettingsState>()((set, get) => ({
+  settings: null,
+  isLoading: true,
 
-      loadSettings: async () => {
-        set({ isLoading: true });
-        try {
-          const settings = await db.getSettings();
-          set({ settings: settings || null, isLoading: false });
-        } catch (err) {
-          console.error('loadSettings failed:', err);
-          set({ isLoading: false });
-        }
-      },
-
-      updateSettings: async (newSettings) => {
-        const current = get().settings;
-        const updated = { ...current, ...newSettings } as UserSettings;
-        await db.saveSettings(updated);
-        set({ settings: updated });
-      },
-
-      setHasHydrated: (value: boolean) => {
-        set({ hasHydrated: value });
-      },
-    }),
-    {
-      name: 'settings-cache',
-      partialize: (state) => ({ settings: state.settings }),
-      onRehydrateStorage: () => (state) => {
-        state?.setHasHydrated(true);
-        state?.loadSettings();
-      },
+  loadSettings: async () => {
+    set({ isLoading: true });
+    try {
+      const settings = await db.getSettings();
+      set({ settings: settings || null, isLoading: false });
+    } catch (err) {
+      console.error('loadSettings failed:', err);
+      set({ isLoading: false });
     }
-  )
-);
+  },
+
+  updateSettings: async (newSettings) => {
+    const current = get().settings;
+    const updated = { ...current, ...newSettings } as UserSettings;
+    await db.saveSettings(updated);
+    set({ settings: updated });
+  },
+}));
 
 // 简历Store
 interface ResumeState {
