@@ -68,13 +68,6 @@ function InterviewSessionContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
-  }, [voiceDisplayValue]);
-
   // 避免 SSR 水合问题
   const mounted = useSyncExternalStore(
     useCallback(() => () => {}, []),
@@ -162,6 +155,12 @@ function InterviewSessionContent() {
     ? inputMessage
     : `${inputMessage}${inputMessage ? ' ' : ''}${voiceDraft}`;
 
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 400) + 'px';
+  }, [voiceDisplayValue]);
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isGenerating || !settings?.apiKey) return;
