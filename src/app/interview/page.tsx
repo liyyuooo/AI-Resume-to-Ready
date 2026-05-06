@@ -163,7 +163,7 @@ function InterviewContent() {
               <SelectContent>
                 {resumes.map((resume) => (
                   <SelectItem key={resume.id} value={resume.id}>
-                    {resume.basicInfo.name || '未命名简历'}
+                    {resume.name || resume.basicInfo.name || '未命名简历'}
                   </SelectItem>
                 ))}
               </SelectContent>
