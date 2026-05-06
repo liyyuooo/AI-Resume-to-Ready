@@ -9,6 +9,7 @@ import { Send, ArrowLeft, RotateCcw, Mic, MicOff, Loader2 } from 'lucide-react';
 import { useResumeStore, useSettingsStore, useInterviewStore } from '@/store';
 import { createLLM } from '@/lib/llm';
 import { getInterviewSystemPrompt } from '@/lib/prompts';
+import { resolveResume } from '@/lib/db';
 import { useSpeechRecognition } from '@/lib/hooks/use-speech-recognition';
 import { v4 as uuidv4 } from 'uuid';
 import type { InterviewSession, InterviewType, Message, ChatCompletionMessage, ContentPart } from '@/types';
@@ -149,7 +150,8 @@ function InterviewSessionContent() {
     setStreamingContent('');
 
     try {
-      const resume = await getResume(resumeId);
+      const rawResume = await getResume(resumeId);
+      const resume = rawResume ? await resolveResume(rawResume) : null;
       const llm = await createLLM({
         apiUrl: settings.apiUrl,
         apiKey: settings.apiKey,
